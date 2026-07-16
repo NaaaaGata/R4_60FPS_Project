@@ -446,3 +446,26 @@ Date: 2026-07-17 JST
 - Individual trajectories confirm player and seven AI cars are coupled to the 30 Hz dispatcher.
 - A player/camera-only interpolation design would leave seven visible AI cars stepped and is therefore incomplete.
 - PASS with zero R4 writes, normal shutdown, and no residual PCSX process. Details: `docs/R4_AI_TRAJECTORIES.md`.
+
+## Section 22 — Audio cadence
+
+Date: 2026-07-17 JST
+
+- `FUN_8005006C` and ten major audio sub-updates ran exactly 60 times over 120 VBlanks, only on active integrated frames.
+- Engine/audio state setter `FUN_80050368` ran 180 times: one overlay use and two channel uses per active frame.
+- Lower SPU voice setters exceeded the 512-hit cap on active VBlanks; exact counts are censored rather than guessed.
+- Three CD/XA command/status functions each ran 60/120, confirming game-side XA/BGM control is also active-frame coupled in this state.
+- Audio waveform rate is not inferred from game control cadence. Audio updates are excluded from render-only re-entry.
+- Details: `docs/R4_AUDIO_CADENCE.md`.
+
+## Section 23 — Replay candidates and existing transform pairs
+
+Date: 2026-07-17 JST
+
+- Bounded runtime probes for `FUN_8002ECD0` and `FUN_8002D3B8` recorded zero hits in the current state; replay analysis remains STATIC_ONLY.
+- The mode callback table contains the active overlay and four alternate owned-overlay candidates; `DEMONSTRATION` exists in the base executable.
+- Alternate overlay decompilation calls `FUN_8002ECD0`, which reconstructs current XYZ from quarter-scale recorded fields, rebuilds matrices, applies offsets, and copies final XYZ to `+0xC8/+0xCC/+0xD0`.
+- A 120-VBlank player/AI probe confirmed `+0xC8/+0xCC/+0xD0` equals same-frame current XYZ on all 60 active samples, not previous-frame XYZ.
+- `+0x20/+0x24/+0x28` is a quarter-scale source related to current position, not a retained prior frame. No prior/current pair or interpolation fraction was found.
+- Camera scratch XYZ changes only on 60 active frames and remains unchanged on duplicates.
+- Details: `docs/R4_REPLAY_PATH.md`; state-pair evidence under ignored `runs/state-pairs/20260716T203519331882Z/`.
