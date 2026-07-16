@@ -37,3 +37,14 @@ The exact main-loop wait branch is now identified at `0x8001EC54`, including its
 This strengthens the no-patch decision: the observed gate surrounds the integrated update/render iteration, not a proven render-only call. Its removal or inversion is therefore not an evidence-backed candidate. Candidate count and R4 RAM experiment count remain zero.
 
 Display/draw pages and both ordering-table streams are now dynamically identified. They switch/build only on the active 30 Hz iteration; duplicates have zero GPU submissions. This removes “emulator screenshot artifact” as an explanation but still does not expose a safe render-only producer. No candidate is authorized.
+
+## Final render-boundary classification
+
+**RESULT_C — integrated too strongly with current evidence.**
+
+- Active overlay: `UNSAFE_SHARED_LOGIC`.
+- Post-camera geometry suffix: `UNSAFE_SHARED_LOGIC` because animation, RNG/audio candidates and persistent state writes remain interleaved.
+- Alternate overlay render path: `INSUFFICIENT_EVIDENCE` and STATIC_ONLY.
+- GPU list reuse/transformation: `INSUFFICIENT_EVIDENCE` for a new camera-aware frame; direct reuse only reproduces the duplicate image.
+
+No `SAFE_RENDER_BOUNDARY` exists. Existing render-position fields are same-frame copies, not previous/current pairs, so RESULT_B is also not satisfied. Full validated records are in `docs/R4_RENDER_BOUNDARY_CANDIDATES.json`; design-only analysis is in `docs/R4_INTERPOLATION_FEASIBILITY.md`.

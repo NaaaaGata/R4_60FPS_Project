@@ -469,3 +469,16 @@ Date: 2026-07-17 JST
 - `+0x20/+0x24/+0x28` is a quarter-scale source related to current position, not a retained prior frame. No prior/current pair or interpolation fraction was found.
 - Camera scratch XYZ changes only on 60 active frames and remains unchanged on duplicates.
 - Details: `docs/R4_REPLAY_PATH.md`; state-pair evidence under ignored `runs/state-pairs/20260716T203519331882Z/`.
+
+## Section 24 — Render candidate schema and interpolation decision
+
+Date: 2026-07-17 JST
+
+- Added strict protocol-1 render candidate model and JSON Schema with exact fields, confidence, and five allowed classifications.
+- Four tracked candidates validate: active overlay and post-camera suffix are unsafe; alternate overlay and GPU transformation lack sufficient evidence.
+- Existing render XYZ is a same-frame copy, camera scratch is 30 Hz, seven AI require visual treatment, and stateful effects/audio remain interleaved.
+- Method A (re-run suffix) is unsafe; B (player/camera only) is incomplete; C (all vehicles/camera shadowing) is conceptually coherent but lacks a safe boundary; D (GPU command mutation) cannot reconstruct camera-aware geometry.
+- No code injection, code cave, RAM address, replacement instruction, or patch manifest was created.
+- Final classification: **RESULT_C — integrated too strongly with current evidence**.
+- Additional state plan is documented but no new state is requested in this phase.
+- Details: `docs/R4_INTERPOLATION_FEASIBILITY.md` and `docs/R4_RENDER_BOUNDARY_CANDIDATES.json`.

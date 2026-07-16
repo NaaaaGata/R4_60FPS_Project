@@ -2,6 +2,14 @@
 
 This report applies to the verified Japanese executable and captured straight-race state. It combines the active overlay decompilation with a 30-frame, 15-breakpoint, read-only Exec trace. No R4 RAM write, patch, broad breakpoint set, or unbounded event collection was used.
 
+## Executive result
+
+**RESULT_C — integration is too strong for a safe game-side render-only or interpolation experiment with current evidence.** Patch experiments must not proceed.
+
+The exact 30 Hz control point is `0x8001EC54 bne v0,zero,0x8001EC48`; its delay slot at `0x8001EC58` is `nop`, and not-taken falls through to `VSync(0)` at `0x8001EC5C`. In the saved race, the preceding `slt` compares the `VSync(1)` poll result with threshold 384. A 600-VBlank trace produced exact 300 active / 300 duplicate alternation. Full branch evidence is in `R4_LOOP_PARITY.md`.
+
+Active intervals run race overlay, vehicle/AI, camera, timer, frame post and GPU submission. Duplicate intervals run none of those selected markers; all fixed state, display/draw IDs, OT roots/hashes, and screenshot hash reuse the preceding active frame.
+
 ## Reconstructed active-frame order
 
 All 30 frames produced the same selected-boundary sequence (544 events total):
@@ -53,7 +61,13 @@ No bounded evidence shows heap allocation or CD access in the selected functions
 
 ## Classification
 
-Current render-boundary classification: **no proven render-only re-entry point**. The evidence is compatible with later interpolation or an emulator-side presentation approach, but not with simply calling an existing suffix twice.
+Current render-boundary classification: **no proven render-only re-entry point**. Machine-readable candidate results are in `R4_RENDER_BOUNDARY_CANDIDATES.json` and validate as RESULT_C.
+
+Display and draw pages alternate between VRAM Y=0 and Y=240 only on active frames. Two bounded OT lists are submitted per active frame; primary content changes each frame, secondary content is stable, and duplicates submit zero lists. See `R4_GPU_PIPELINE.md`.
+
+Existing object `+0xC8/+0xCC/+0xD0` fields are same-frame XYZ copies, not prior transforms. Seven AI cars require interpolation alongside the player, while audio, RNG/animation, HUD and geometry writes are interleaved. Options A–D, conceptual shadow state, emulator-side alternative, and additional-state priorities are evaluated in `R4_INTERPOLATION_FEASIBILITY.md`.
+
+The next safe work is additional read-only state coverage—especially corner/AI pack, camera switch, respawn, and replay—not a patch, NOP, wait removal, frame-counter change, command-list mutation, or R4 RAM write.
 
 ## Reproduction
 

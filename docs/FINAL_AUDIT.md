@@ -31,7 +31,7 @@ Date: 2026-07-17 JST. This audit distinguishes infrastructure, one verified race
 | Scratch restoration | PASS narrow scope | audited `0x1F8003FC`, paused transient write/read/restore only |
 | Automated evaluation | PASS infrastructure | cadence, trajectories, visual checks, SQLite/reporting |
 | Real Codex proposal gate | PASS | one signed CLI call, strict schema, zero emulator experiments |
-| Asset-free tests | PASS | 67 pytest tests; mypy clean for 36 source files |
+| Asset-free tests | PASS | 102 pytest tests; mypy clean for 45 source files |
 
 ## Dynamic address results
 
@@ -96,8 +96,8 @@ During diagnosis, macOS blocked stale Homebrew Codex 0.125.0 due an invalid sign
 - Ghidra: official NSA 12.1.2, ZIP SHA-256 `b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d`.
 - Java: OpenJDK 21.0.11.
 - Codex: 0.144.5, macOS code signature valid.
-- `pytest`: 67 passed.
-- `mypy src`: success, 36 source files.
+- `pytest`: 102 passed.
+- `mypy src`: success, 45 source files.
 - `doctor`: all required/optional configured tools detected.
 - Extended `pcsx-capabilities`: all requested checks PASS; scratch intentionally SKIP in final read-only smoke because its separate explicit proof already passed.
 - Real campaign budget dry-run: PASS.
@@ -105,14 +105,15 @@ During diagnosis, macOS blocked stale Homebrew Codex 0.125.0 due an invalid sign
 
 ## GitHub delivery
 
-- Branch: `feat/race-state-analysis`.
-- Base: `feat/full-autolab`.
-- Draft PR: `https://github.com/NaaaaGata/R4_60FPS_Project/pull/1`.
+- Prior branch: `feat/race-state-analysis`, Draft PR #1.
+- Render-boundary branch: `feat/render-boundary-analysis`.
+- Render-boundary base: `feat/race-state-analysis`.
+- Draft PR: `https://github.com/NaaaaGata/R4_60FPS_Project/pull/2`.
 - Phase commits through this audit include `5ffc2e3`, `353ad25`, `c24876e`, `8182590`, `67044c9`, `aaec8e8`, and `9ca48a0`; final audit/campaign commit follows this document.
 
 ## Unresolved work
 
-The input-read function, exact render-skip/parity semantics, display/draw buffer IDs, GPU command-content hash, RPM, per-AI trajectories, audio cadence, replay path/compatibility, other courses/views, CPU overclock needs, and a render-only interpolation architecture remain unresolved. These gaps prohibit a 60 fps patch claim.
+Raw SIO parsing/analog scalars, exact RPM units, runtime replay reachability/compatibility, safe previous/current shadow ownership, other courses/views, and CPU overclock needs remain unresolved. The exact wait branch, parity, display/draw IDs, bounded GPU hashes, digital input path, engine-speed candidate, individual AI trajectories, audio cadence, and static replay transform candidate are now documented. Remaining gaps still prohibit a 60 fps patch claim.
 
 The next safe step is more bounded observation and static correlation of those items. It is not a RAM patch, frame-wait removal, NOP, or broad address search.
 
@@ -134,3 +135,28 @@ r4-autolab campaign --config config/budgets.real.example.toml
 r4-autolab campaign --config config/budgets.real.example.toml --execute --real-codex
 git diff --check
 ```
+
+## Render-boundary final audit
+
+The read-only render-boundary phase used state SHA-256 `a80f4a2c1dead74c41e309fe0762b397e635e390ba46ce8251f016b3c595c1e7` throughout and never ran the scratch write option.
+
+| Requirement | Result | Evidence |
+|---|---|---|
+| Exact 30 Hz gate | DYNAMIC_CONFIRMED | `0x8001EC54 bne`, `0x8001EC58 nop`, threshold 384, bounded outcomes |
+| Active/duplicate parity | PASS | exact 300/300 alternation over 600 VBlanks |
+| Display/draw pages | DYNAMIC_CONFIRMED | opposing `(0,0)` / `(0,240)` 320×240 pages |
+| GPU command cadence | PASS | 240 bounded list traversals; 120 primary hashes; zero duplicate submissions |
+| Overlay call order | PASS | identical selected 15-function order over 30 active frames |
+| Side-effect isolation | FAIL for re-entry | timer/physics/AI/animation/RNG/audio/static/OT work interleaved |
+| Input path | DYNAMIC_CONFIRMED digital | frame-post producer and CROSS/LEFT/RIGHT held masks |
+| RPM | UNKNOWN exact unit | engine-speed/HUD/audio candidate dynamically confirmed |
+| AI trajectories | PASS | 8 vehicles × 300 samples × 3 fresh processes, exact signatures |
+| Audio cadence | DYNAMIC_CONFIRMED | top-level and CD/XA control at 60/120 active VBlanks |
+| Replay | STATIC_ONLY | alternate callbacks and recorded-transform function; zero runtime hits |
+| Previous/current transforms | FAIL for existing pair | render XYZ is same-frame copy; no prior frame or alpha found |
+| Candidate schema | PASS | strict protocol-1 model/schema and tracked RESULT_C artifact |
+| R4 memory writes | 0 | Python and Lua read-only enforcement; all reports record zero |
+
+Final decision: **RESULT_C — integrated too strongly with current evidence**. There is no `SAFE_RENDER_BOUNDARY`, and RESULT_B is not met because a complete prior/current set and side-effect-free insertion point do not exist. No patch, NOP, branch change, VSync change, frame-counter change, command-list mutation, or RAM experiment is authorized.
+
+Design-only alternatives and future state priorities are in `docs/R4_INTERPOLATION_FEASIBILITY.md`. The next safe work remains read-only multi-scene observation or clearly labelled emulator-side presentation interpolation research.
