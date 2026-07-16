@@ -15,7 +15,7 @@
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
 | Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
 | Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
-| Race-state capture | IMPLEMENTED / REAL CAPTURE PENDING | One-Enter raw capture, source hashes, three-process validation, ignored config registration |
+| Race-state capture | COMPLETE | One-Enter raw capture and three-process deterministic reload PASS |
 
 Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
 
@@ -202,6 +202,32 @@ Date: 2026-07-17 JST
 - `git check-ignore`: state, raw screenshot, validation report, local config, CUE, and BIN all matched explicit ignore rules.
 - Real extended PCSX capability smoke remains PASS, including raw-state roundtrip and breakpoint lifecycle.
 
-### Next transition
+### Transition result
 
-The implementation is ready to launch. The only pending human action is navigating R4 to a stable straight during a race and pressing Enter once; validation and subsequent read-only analysis continue automatically.
+The one-time manual navigation and Enter capture completed successfully. Section 9 records the resulting state and reproducibility evidence.
+
+## Section 9 — Real race-state capture and validation
+
+Date: 2026-07-17 JST
+
+### Captured evidence
+
+- Ignored state: `states/manual-race-20260716T171240718201Z/race_straight.rawstate`.
+- State SHA-256: `a80f4a2c1dead74c41e309fe0762b397e635e390ba46ce8251f016b3c595c1e7`.
+- Size: 19,063,530 bytes; source CUE/BIN hashes remained unchanged.
+- Raw screenshot is valid 320×240×16-bpp and visibly shows an active race straight at approximately 95 km/h.
+- Local `config/project.toml` now selects real mode, the verified disc/state, scenario `race-straight`, and 120 VBlanks. It remains ignored.
+
+### Three-process reproducibility
+
+- Three fresh PCSX-Redux processes loaded the raw state successfully and shut down without residue.
+- Initial candidate bytes, 60-VBlank candidate trajectories, initial screenshot hash, and final screenshot hash matched across all attempts.
+- Pause sampling consistently caught the PS1 general exception vector `PC=0x80000080` with target return `RA=0x8008AFCC`; the validator now recognizes this standard interrupt context instead of requiring PC alone to be inside the payload.
+- Final validation classification: **PASS**.
+- Public-address candidates except `0x801FFF58` remained zero despite the visible race, so their Japanese-version semantics are not assumed and must be rediscovered from trace evidence.
+
+### Verification
+
+- `pytest`: 46 passed.
+- `mypy src`: success for 29 source files.
+- No R4 memory write or patch was performed.

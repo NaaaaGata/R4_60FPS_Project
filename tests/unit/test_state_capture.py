@@ -7,6 +7,7 @@ from r4_autolab.state_capture import (
     CaptureAssets,
     capture_state_artifacts,
     confirm_game_loaded,
+    execution_context_matches_target,
     update_project_config,
 )
 
@@ -94,6 +95,16 @@ def test_confirm_game_loaded_accepts_pc_in_verified_payload(tmp_path: Path) -> N
     result = confirm_game_loaded(adapter, identity(tmp_path / "exe"), 1.0)  # type: ignore[arg-type]
     assert result.pc == 0x80010020
     assert adapter.run_count == 60
+
+
+def test_execution_context_accepts_exception_vector_with_target_return(tmp_path: Path) -> None:
+    target = identity(tmp_path / "exe")
+    assert execution_context_matches_target(
+        {"pc": "0x80000080", "ra": "0x80010030"}, target
+    )
+    assert not execution_context_matches_target(
+        {"pc": "0x80000080", "ra": "0xBFC00000"}, target
+    )
 
 
 def test_update_project_config_uses_relative_private_paths(tmp_path: Path) -> None:

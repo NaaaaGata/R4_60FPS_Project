@@ -185,6 +185,23 @@ def _registers_dict(snapshot: RegisterSnapshot) -> dict[str, Any]:
     }
 
 
+def execution_context_matches_target(
+    registers: dict[str, Any],
+    identity: PsxExecutableMetadata,
+) -> bool:
+    """Accept target code or a PS1 exception vector returning to target code."""
+    pc = int(str(registers["pc"]), 0)
+    ra = int(str(registers["ra"]), 0)
+    target_start = int(identity.load_address, 0)
+    target_end = target_start + identity.payload_size
+    pc_in_target = target_start <= pc < target_end
+    # Sampling immediately after pause can catch the R3000A general exception
+    # vector. In that case RA supplies the interrupted target execution context.
+    pc_in_exception_vector = 0x80000000 <= pc < 0x80000100
+    ra_in_target = target_start <= ra < target_end
+    return pc_in_target or (pc_in_exception_vector and ra_in_target)
+
+
 def _watch_values(adapter: CaptureAdapter) -> dict[str, dict[str, Any]]:
     values: dict[str, dict[str, Any]] = {}
     for watch in R4_STARTING_WATCHES:
@@ -384,20 +401,19 @@ def validate_state_reloads(
         final_values = [item["final"]["candidate_values"] for item in results]
         initial_screens = [item["initial"]["screenshot"]["sha256"] for item in results]
         final_screens = [item["final"]["screenshot"]["sha256"] for item in results]
-        pc_start = int(assets.identity.load_address, 0)
-        pc_end = pc_start + assets.identity.payload_size
-        pcs_in_code = all(
-            pc_start <= int(item["initial"]["registers"]["pc"], 0) < pc_end for item in results
+        contexts_in_target = all(
+            execution_context_matches_target(item["initial"]["registers"], assets.identity)
+            for item in results
         )
         values_equal = all(value == initial_values[0] for value in initial_values[1:])
         trajectory_equal = all(value == final_values[0] for value in final_values[1:])
         screens_equal = len(set(initial_screens)) == 1 and len(set(final_screens)) == 1
-        if pcs_in_code and values_equal and trajectory_equal and screens_equal:
+        if contexts_in_target and values_equal and trajectory_equal and screens_equal:
             status = "PASS"
         else:
             reasons.extend(
                 [
-                    f"initial_pc_in_code={pcs_in_code}",
+                    f"initial_execution_context_in_target={contexts_in_target}",
                     f"initial_candidate_values_equal={values_equal}",
                     f"post_trajectory_equal={trajectory_equal}",
                     f"screenshot_hashes_equal={screens_equal}",

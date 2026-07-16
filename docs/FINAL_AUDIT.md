@@ -19,7 +19,8 @@ This audit distinguishes implemented infrastructure from external evidence that 
 | Ghidra bridge | PASS fake / BLOCKED real | `analyzeHeadless` absent |
 | Codex loop | PASS fake / real disabled | schema/readonly adapter and fake campaign |
 | First R4 target identity | PASS | serial, executable hash/header confirmed |
-| First R4 race investigation | BLOCKED | deterministic race state/input absent |
+| Deterministic R4 race state | PASS | one-Enter capture and three-process reload validation |
+| First R4 race investigation | PARTIAL | deterministic state present; input replay and bounded race traces pending |
 
 ## Safety audit
 
@@ -48,11 +49,10 @@ No 60 fps candidate exists, and none should be generated from the boot trace. Su
 
 ## Exact external resume requirements
 
-1. Prepare a private deterministic race `.rawstate` compatible with the Lua raw protobuf API.
-2. Prepare a deterministic input script or verified controller-override sequence.
-3. Install an official Ghidra release/JDK and set `R4_AUTOLAB_GHIDRA_HEADLESS`.
-4. Run bounded race observation for the frame and vehicle Write PCs, then bounded render-time Read PCs.
-5. Map only captured PCs to functions/xrefs and classify update loops.
-6. Only after evidence exists, consider one RAM-only candidate with expected bytes and full restoration.
+1. Implement and verify a deterministic controller-override sequence from the official PCSX-Redux Pad API.
+2. Register the verified local Ghidra installation and real-smoke the export script.
+3. Run bounded race observation for the frame and vehicle Write PCs, then bounded render-time Read PCs.
+4. Map only captured PCs to functions/xrefs and classify update loops.
+5. Only after evidence exists, consider one RAM-only candidate with expected bytes and full restoration.
 
 The repository is therefore complete for the automation and boot-observation work executable in the current environment, while race-level and 60 fps conclusions are explicitly blocked rather than fabricated.
