@@ -125,6 +125,7 @@ class BreakpointSpec:
     address: int
     access: str
     width: int = 4
+    max_hits: int | None = None
 
 
 @dataclass(frozen=True)
@@ -167,4 +168,3 @@ class Comparison:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-

@@ -218,7 +218,7 @@ class PCSXReduxAdapter:
     def set_breakpoint(self, spec: BreakpointSpec) -> str:
         result = self._request(
             "set_breakpoint",
-            {"address": spec.address, "access": spec.access, "width": spec.width},
+            {"address": spec.address, "access": spec.access, "width": spec.width, "max_hits": spec.max_hits},
         )
         return str(result["breakpoint_id"])
 
@@ -239,6 +239,9 @@ class PCSXReduxAdapter:
 
     def get_vblank_count(self) -> int:
         return int(self._request("get_vblank_count")["count"])
+
+    def configure_watches(self, watches: list[dict[str, Any]]) -> int:
+        return int(self._request("configure_watches", {"watches": watches})["configured"])
 
     def capture_screenshot(self, path: Path) -> None:
         raw_path = path.with_suffix(".raw").resolve()

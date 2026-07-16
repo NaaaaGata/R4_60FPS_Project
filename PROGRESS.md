@@ -14,7 +14,7 @@
 | Phase 4: Static analysis bridge | COMPLETE WITH REAL-SMOKE BLOCKER | Headless runner/cache/export script/fake tests complete; Ghidra absent |
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
 | Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
-| Phase 7: First R4 investigation | PENDING | Owned disc exists; deterministic race state/input not yet configured |
+| Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
 
 ## Section 1 — Baseline audit (Phase 0 through Phase 3A)
 
@@ -136,3 +136,33 @@ Date: 2026-07-17 JST
 - No real Codex subprocess or API call was made.
 - Real enablement requires a separate trusted deployment setting and operator-approved non-zero cost budget; default example cost remains 0.0.
 - The adapter follows the current official non-interactive Codex schema-output and least-privilege guidance documented in `docs/CODEX_LOOP.md`.
+
+## Section 6 — Phase 7 first R4 investigation
+
+Date: 2026-07-17 JST
+
+### Confirmed target
+
+- Read-only MODE2/2352 ISO9660 extraction identified `SLPS_018.00;1` / `SLPS-01800`.
+- Executable SHA-256: `95a9dc1e81039d5a404091bf75bb1fb67c32f693faa04b629fb48073b2641775`.
+- Load address `0x80010000`; initial PC `0x8007D4B4`; payload 638,976 bytes.
+
+### Dynamic boot observation
+
+- 600 VBlank, eight configured watches, bounded Read/Write breakpoints, no patches or memory writes.
+- 46 breakpoint events collected with PC, RA, accessed address, width, and cause.
+- Camera candidate `0x801FFF58` had four sampled changes and multiple runtime Read/Write PCs.
+- Frame/vehicle/speed/RPM candidates remained zero and showed only initialization writes; their race semantics remain unverified.
+- Full evidence and confidence labels are in `docs/FIRST_R4_OBSERVATION.md`.
+
+### Bugs found and fixed
+
+- Serial normalization no longer drops the `.00` suffix.
+- Lua breakpoint IDs now use a monotonic counter rather than the length of a string-keyed table.
+- Read breakpoints have a per-breakpoint hit budget to prevent event floods.
+
+### Test status and blockers
+
+- `pytest`: 42 passed.
+- `mypy src`: success for 28 source files.
+- Race-level continuation is blocked by the absence of a deterministic private race `.rawstate`, input script, and installed Ghidra. Boot results are not promoted to race conclusions.

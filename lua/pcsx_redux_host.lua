@@ -58,10 +58,12 @@ function Host.new(json, base64)
         dropped = 0,
         vblank_count = 0,
         breakpoints = {},
+        breakpoint_sequence = 0,
         listeners = {},
         memory = PCSX.getMemoryAsFile(),
         event_sender = nil,
         vblank_target = nil,
+        watches = {},
     }, Host)
     return self
 end
@@ -190,7 +192,19 @@ end
 
 function Host:monotonic_time() return tonumber(luv.hrtime()) / 1000000000 end
 function Host:wall_time() return os.date('!%Y-%m-%dT%H:%M:%SZ') end
-function Host:sample_watches() return {} end
+function Host:sample_watches()
+    local values = {}
+    for _, watch in ipairs(self.watches) do
+        local ok, value = pcall(function()
+            if watch.width == 1 then return self:read_u8(watch.address) end
+            if watch.width == 2 then return self:read_u16(watch.address) end
+            if watch.width == 4 then return self:read_u32(watch.address) end
+            error('unsupported watch width')
+        end)
+        values[watch.name] = ok and value or ('ERROR:' .. tostring(value))
+    end
+    return values
+end
 function Host:display_buffer() return -1 end
 function Host:gpu_hash() return 'unavailable-phase-3a' end
 function Host:dropped_event_count() return self.dropped end
@@ -232,19 +246,26 @@ function Host:set_breakpoint(specification)
     local address = integer(specification.address, 'breakpoint address')
     local width = integer(specification.width or 4, 'breakpoint width')
     assert(width > 0 and width <= MAX_MEMORY_BYTES, 'invalid breakpoint width')
-    local identifier = 'bp-' .. tostring(#self.breakpoints + 1)
+    local max_hits = specification.max_hits
+    if max_hits ~= nil then max_hits = integer(max_hits, 'breakpoint max hits'); assert(max_hits > 0, 'max hits must be positive') end
+    local hit_count = 0
+    self.breakpoint_sequence = self.breakpoint_sequence + 1
+    local identifier = 'bp-' .. tostring(self.breakpoint_sequence)
     local breakpoint = PCSX.addBreakpoint(address, access, width, 'R4 AutoLab ' .. identifier, function(actual_address, actual_width, cause)
+        hit_count = hit_count + 1
         local ok, message = pcall(function()
             local snapshot = register_snapshot()
             PCSX.nextTick(function()
                 self:_emit({
                     kind = 'event', event = 'breakpoint', breakpoint_id = identifier,
+                    access = specification.access,
                     pc = snapshot.pc, ra = snapshot.ra, sp = snapshot.sp,
                     accessed_address = tonumber(actual_address), access_width = tonumber(actual_width), cause = tostring(cause),
                 })
             end)
         end)
         if not ok then printError('R4 AutoLab breakpoint callback failed: ' .. tostring(message)) end
+        if max_hits and hit_count >= max_hits then return false end
     end)
     self.breakpoints[identifier] = breakpoint
     return identifier
@@ -321,6 +342,18 @@ function Host:dispatch(operation, payload)
         PCSX.resumeEmulator()
         return { target = self.vblank_target }
     elseif operation == 'get_registers' then return register_snapshot()
+    elseif operation == 'configure_watches' then
+        assert(type(payload.watches) == 'table' and #payload.watches <= 64, 'invalid watch list')
+        self.watches = {}
+        for _, watch in ipairs(payload.watches) do
+            local address = integer(watch.address, 'watch address')
+            local width = integer(watch.width, 'watch width')
+            assert(width == 1 or width == 2 or width == 4, 'watch width must be 1, 2, or 4')
+            safe_memory_range(address, width)
+            assert(type(watch.name) == 'string' and #watch.name > 0, 'watch name is required')
+            self.watches[#self.watches + 1] = { name = watch.name, address = address, width = width }
+        end
+        return { configured = #self.watches }
     elseif operation == 'read_memory' then
         return { data_base64 = self.base64.encode(self:read_memory(payload.address, payload.size)) }
     elseif operation == 'write_memory' then

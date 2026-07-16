@@ -27,6 +27,8 @@ from .emulator.pcsx_redux import (
 from .emulator.transport import TcpJsonlTransport
 from .evaluator import compare_summaries, evaluate_trace_pair, load_jsonl, summary_from_record, summarize_events
 from .analysis.visual import analyze_raw_screenshot
+from .analysis.iso9660 import inspect_disc_executable
+from .analysis.observation import observe_r4_boot
 from .models import ExperimentProposal, TargetVersion
 from .reporting.markdown import render_run_report
 from .storage import ExperimentStore
@@ -232,6 +234,33 @@ def command_inspect_input(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_inspect_disc(args: argparse.Namespace) -> int:
+    metadata = inspect_disc_executable(Path(args.cue).resolve(), Path(args.extract_directory).resolve())
+    print(json.dumps(metadata.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
+def command_r4_observe(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for read-only R4 observation")
+    cue = Path(args.cue).resolve()
+    if not cue.is_file():
+        raise FileNotFoundError(cue)
+    run_dir = config.runs_dir / "observations" / _timestamp_id("r4-boot")
+    report = observe_r4_boot(
+        executable,
+        config.lua_bootstrap.resolve(),
+        cue,
+        run_dir,
+        args.vblanks,
+        max(float(args.timeout), config.timeout_seconds),
+    )
+    print(json.dumps({"run_dir": str(run_dir), "report": report}, indent=2, sort_keys=True))
+    return 0
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -412,6 +441,17 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_input = subparsers.add_parser("inspect-input")
     inspect_input.add_argument("path")
     inspect_input.set_defaults(func=command_inspect_input)
+
+    inspect_disc = subparsers.add_parser("inspect-disc")
+    inspect_disc.add_argument("--cue", required=True)
+    inspect_disc.add_argument("--extract-directory", default="private/extracted")
+    inspect_disc.set_defaults(func=command_inspect_disc)
+
+    observe = subparsers.add_parser("r4-observe")
+    observe.add_argument("--cue", required=True)
+    observe.add_argument("--vblanks", type=int, default=600)
+    observe.add_argument("--timeout", type=float, default=30.0)
+    observe.set_defaults(func=command_r4_observe)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)

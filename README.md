@@ -35,6 +35,8 @@ r4-autolab ghidra-export --input /private/path/PSX.EXE --address 0x80010000 --fa
 r4-autolab visual-check --raw screenshot.raw --metadata screenshot.json
 r4-autolab init-config
 r4-autolab inspect-input /path/to/owned/file
+r4-autolab inspect-disc --cue /path/to/owned/disc.cue --extract-directory private/extracted
+r4-autolab r4-observe --cue /path/to/owned/disc.cue --vblanks 600
 r4-autolab baseline --scenario fake-straight
 r4-autolab experiment --proposal config/fake_candidate.example.json
 r4-autolab compare <baseline-id> <experiment-id>
