@@ -35,3 +35,5 @@ The next safe work is additional observation/static correlation of GPU submissio
 The exact main-loop wait branch is now identified at `0x8001EC54`, including its `nop` delay slot and fall-through to the `VSync(0)` call at `0x8001EC5C`. A 600-VBlank read-only trace produced an exact 300 active / 300 duplicate alternation. Frame state, player state, command-base selection, GPU submission, and displayed pixels all remain unchanged on each duplicate interval.
 
 This strengthens the no-patch decision: the observed gate surrounds the integrated update/render iteration, not a proven render-only call. Its removal or inversion is therefore not an evidence-backed candidate. Candidate count and R4 RAM experiment count remain zero.
+
+Display/draw pages and both ordering-table streams are now dynamically identified. They switch/build only on the active 30 Hz iteration; duplicates have zero GPU submissions. This removes “emulator screenshot artifact” as an explanation but still does not expose a safe render-only producer. No candidate is authorized.

@@ -98,6 +98,8 @@ The previous cadence conclusion is now backed by branch-level evidence. `0x8001E
 
 Over a separate 600-VBlank run, active and duplicate intervals alternated exactly 300/300. Every fixed race watch and screenshot hash stayed unchanged on duplicate intervals. Active frames alternated parity 0/1 and command bases `0x800AD8D0` / `0x800D0048`, separated by `0x22778`. Full branch metadata, delay-slot handling, and bounds are in `docs/R4_LOOP_PARITY.md`.
 
+A 240-VBlank GPU trace decoded opposing 320×240 display/draw pages at VRAM Y=0 and Y=240. It bounded-traversed both submitted ordering tables on all 120 active frames: the primary content hash changed on every active frame, the secondary list was stable, and duplicates made no submission and reused the prior command/screenshot hashes. See `docs/R4_GPU_PIPELINE.md`.
+
 ## Consequence for experiments
 
 A safe 60 fps candidate cannot be inferred by simply removing a wait or doubling the whole loop: the measured loop contains physics, AI, camera, timer, HUD, and rendering together. Such a change has a high risk of doubling game speed and invalidating lap timing. The next patch candidate must first isolate a render-only call path or introduce interpolation with explicit evidence. Until then, patch generation remains gated off.

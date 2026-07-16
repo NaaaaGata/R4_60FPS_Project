@@ -394,3 +394,17 @@ Date: 2026-07-17 JST
 - Frame parity alternates command bases `0x800AD8D0` and `0x800D0048`, stride `0x22778`, once per active frame.
 - The 600-VBlank run retained 6,000 bounded events, wrote zero R4 bytes, shut down normally, and left no PCSX process.
 - Detailed evidence and limits: `docs/R4_LOOP_PARITY.md`.
+
+## Section 18 — Display/draw pages and bounded GPU command cadence
+
+Date: 2026-07-17 JST
+
+- Official PCSX-Redux Lua docs confirm raw screenshot access but do not document direct current-page, GP0/GP1, GPUSTAT, DMA2, or OT-root getters; no API was guessed.
+- Ghidra and dynamic `a0` values identify `0x8009331C` as PutDispEnv, `0x80093150` as PutDrawEnv, and `0x800930E0` as DrawOTag.
+- A 240-VBlank real trace confirmed opposing 320×240 display/draw pages at VRAM Y=0/Y=240, switched only on 120 active frames.
+- Four OT roots map to the two `0x22778` command arenas. Two lists are submitted per active frame and zero on every duplicate.
+- Added PS1 RAM pointer validation, loop detection, payload bounds, 4,096-node cap, 1 MiB byte cap, and address-normalized command hashing.
+- All 240 list traversals terminated normally. Primary list content changed on all 120 active frames; the secondary list was structurally stable.
+- Every duplicate reused the preceding command identity and screenshot hash. Normal shutdown left no PCSX process and wrote zero R4 bytes.
+- The first node-per-IPC prototype was safely interrupted as too slow; cleanup succeeded. A 1,024-node bounded attempt was retained as FAIL and motivated the final 4,096-node cap.
+- Detailed evidence and UNKNOWN fields: `docs/R4_GPU_PIPELINE.md`.
