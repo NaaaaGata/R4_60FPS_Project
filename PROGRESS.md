@@ -408,3 +408,16 @@ Date: 2026-07-17 JST
 - Every duplicate reused the preceding command identity and screenshot hash. Normal shutdown left no PCSX process and wrote zero R4 bytes.
 - The first node-per-IPC prototype was safely interrupted as too slow; cleanup succeeded. A 1,024-node bounded attempt was retained as FAIL and motivated the final 4,096-node cap.
 - Detailed evidence and UNKNOWN fields: `docs/R4_GPU_PIPELINE.md`.
+
+## Section 19 — Active overlay call order and side effects
+
+Date: 2026-07-17 JST
+
+- Ghidra re-exported 14 selected base functions; dynamic tracing used only those boundaries plus the overlay entry, 15 breakpoints total.
+- Thirty active frames reconstructed identically from CPU-cycle order and overlay delimiters; 544 events stayed far below 2,048 per frame.
+- Selected order is timer → early HUD/OT → player/AI dispatcher → camera → stateful animation → camera matrices → render/geometry phases → stateful world effects → HUD animation → audio/static state → GPU submission.
+- OT construction starts before vehicle physics and continues later; the path is not a contiguous logic-then-render suffix.
+- Stateful animation, static, RNG/audio candidates, and OT writes are interleaved with geometry. The apparent render suffix is excluded from direct re-entry.
+- Two isolated HUD primitive builders survive the coarse side-effect exclusion but cannot redraw the 3D scene.
+- No render-only boundary is proven; no R4 memory write or patch was attempted.
+- Detailed callsites, roles, confidence, side effects, and boundary decisions: `docs/R4_RENDER_BOUNDARY.md`.
