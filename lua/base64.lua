@@ -32,4 +32,3 @@ function Base64.decode(data)
 end
 
 return Base64
-
