@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import struct
+import subprocess
 import sys
 import tomllib
 from typing import Any, Sequence
@@ -15,6 +16,15 @@ from typing import Any, Sequence
 from . import __version__
 from .config import ProjectConfig, load_project_config
 from .emulator.fake import FakeEmulator
+from .emulator.capabilities import CapabilityCheck, CapabilityReport, CapabilityRunner
+from .emulator.pcsx_redux import (
+    PCSXLaunchOptions,
+    PCSXReduxAdapter,
+    discover_pcsx_redux,
+    local_architecture,
+    query_pcsx_redux_version,
+)
+from .emulator.transport import TcpJsonlTransport
 from .evaluator import compare_summaries, load_jsonl, summary_from_record, summarize_events
 from .models import ExperimentProposal, TargetVersion
 from .reporting.markdown import render_run_report
@@ -59,20 +69,93 @@ def _load_config(args: argparse.Namespace) -> ProjectConfig:
 
 def command_doctor(_: argparse.Namespace) -> int:
     python_ok = sys.version_info >= (3, 11)
+    pcsx_path = discover_pcsx_redux()
+    pcsx_version: str | None = None
+    if pcsx_path is not None:
+        try:
+            version_info = query_pcsx_redux_version(pcsx_path)
+            pcsx_version = version_info.get("changeset") or version_info.get("version")
+        except (OSError, ValueError, subprocess.SubprocessError, json.JSONDecodeError):
+            pcsx_version = "detected; version query failed"
     tools = [
         ("Python >= 3.11", sys.executable, sys.version.split()[0], True, python_ok),
         ("Git", shutil.which("git"), None, False, True),
         ("Codex CLI", os.environ.get("R4_AUTOLAB_CODEX") or shutil.which("codex"), None, False, True),
-        ("PCSX-Redux", os.environ.get("R4_AUTOLAB_PCSX_REDUX") or shutil.which("pcsx-redux"), None, False, True),
+        ("PCSX-Redux", str(pcsx_path) if pcsx_path else None, pcsx_version, False, True),
         ("Ghidra analyzeHeadless", os.environ.get("R4_AUTOLAB_GHIDRA_HEADLESS") or shutil.which("analyzeHeadless"), None, False, True),
         ("Java", shutil.which("java"), None, False, True),
     ]
     print(f"R4 AutoLab {__version__}")
-    for name, path, version, required, valid in tools:
+    for name, path, tool_version, required, valid in tools:
         status = "OK" if path and valid else ("MISSING" if required else "optional-missing")
-        detail = f" ({version})" if version else ""
+        detail = f" ({tool_version})" if tool_version else ""
         print(f"{status:16} {'required' if required else 'optional':8} {name}: {path or '-'}{detail}")
     return 0 if python_ok else 1
+
+
+def _write_unavailable_capability_report(
+    run_dir: Path,
+    detail: str,
+) -> CapabilityReport:
+    run_dir.mkdir(parents=True, exist_ok=False)
+    report = CapabilityReport(
+        created_at=datetime.now(UTC).isoformat(),
+        executable="",
+        version={},
+        architecture=local_architecture(),
+        checks=[CapabilityCheck("launch", "FAIL", detail)],
+        log_path=str(run_dir / "pcsx-redux.log"),
+    )
+    (run_dir / "capabilities.json").write_text(
+        json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return report
+
+
+def command_pcsx_capabilities(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    run_dir = config.runs_dir / "capabilities" / _timestamp_id("pcsx")
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        report = _write_unavailable_capability_report(
+            run_dir,
+            "PCSX-Redux executable not found via environment, configuration, PATH, or macOS application directories",
+        )
+    else:
+        version_info = query_pcsx_redux_version(executable)
+        transport = TcpJsonlTransport()
+        options = PCSXLaunchOptions(
+            executable=executable,
+            lua_bootstrap=config.lua_bootstrap.resolve(),
+            run=True,
+            stdout=True,
+            lua_stdout=True,
+            interpreter=True,
+            debugger=True,
+            testmode=True,
+            portable_directory=run_dir / "portable",
+        )
+        adapter = PCSXReduxAdapter(options, transport)
+        scratch_address = args.scratch_address
+        if scratch_address is None:
+            scratch_address = config.scratch_address
+        runner = CapabilityRunner(
+            adapter,
+            transport,
+            run_dir,
+            executable=executable,
+            version=version_info,
+            architecture=local_architecture(),
+            timeout_seconds=max(config.timeout_seconds, 10.0),
+            allow_scratch_write=bool(args.allow_scratch_write),
+            scratch_address=scratch_address,
+        )
+        report = runner.run()
+    for check in report.checks:
+        print(f"{check.status:4} {check.name:20} {check.detail}")
+    print(f"JSON {run_dir / 'capabilities.json'}")
+    return 0 if report.succeeded else 2
 
 
 def command_init_config(args: argparse.Namespace) -> int:
@@ -277,6 +360,11 @@ def build_parser() -> argparse.ArgumentParser:
     campaign.add_argument("--execute", action="store_true")
     campaign.set_defaults(func=command_campaign)
 
+    capabilities = subparsers.add_parser("pcsx-capabilities")
+    capabilities.add_argument("--allow-scratch-write", action="store_true")
+    capabilities.add_argument("--scratch-address", type=lambda value: int(value, 0))
+    capabilities.set_defaults(func=command_pcsx_capabilities)
+
     stop = subparsers.add_parser("stop")
     stop.set_defaults(func=command_stop)
     return parser
@@ -294,4 +382,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

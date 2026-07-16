@@ -16,3 +16,10 @@ SQLite stores experiment identity, lifecycle, summaries, and comparisons. High-v
 
 The validator defaults to one aligned change inside PS1 main RAM, requires exact original bytes and restoration data, and rejects unverified target identity. Multi-change support is intentionally absent from the MVP.
 
+## ADR-005: Loopback TCP for the PCSX-Redux bridge
+
+Phase 3A uses a Python server bound exactly to `127.0.0.1` and a Lua/Luv client. This is directly testable, avoids filesystem polling races, supports request timeouts and asynchronous VBlank events, and can be closed from the PCSX-Redux `Quitting` event. A random per-process token prevents an unrelated local process from completing the handshake. Reconnection is deliberately not automatic; disconnect is a terminal capability failure.
+
+## ADR-006: Raw screenshots and explicit raw save states
+
+PCSX-Redux returns screenshot pixels as a Slice, so Phase 3A writes bounded raw data plus JSON metadata without adding an image dependency. Lua save-state APIs use uncompressed protobuf data while UI states are gzip-compressed; the bridge accepts only explicitly named `.rawstate` files and rejects ambiguous/UI formats.

@@ -18,6 +18,11 @@ class ProjectConfig:
     vblanks: int
     timeout_seconds: float
     save_state: Path | None
+    pcsx_executable: Path | None
+    lua_bootstrap: Path
+    bios_path: Path | None
+    disc_path: Path | None
+    scratch_address: int | None
 
 
 def _resolve(root: Path, value: str) -> Path:
@@ -40,6 +45,14 @@ def load_project_config(path: Path) -> ProjectConfig:
     if vblanks <= 0:
         raise ValueError("experiment.vblanks must be positive")
     save_value = str(target.get("save_state", ""))
+    executable_value = str(emulator.get("executable", ""))
+    bootstrap_value = str(emulator.get("lua_bootstrap", "lua/bootstrap.lua"))
+    bios_value = str(target.get("bios_path", ""))
+    disc_value = str(target.get("disc_path", ""))
+    raw_scratch = emulator.get("scratch_address")
+    scratch_address = (
+        int(raw_scratch, 0) if isinstance(raw_scratch, str) else int(raw_scratch)
+    ) if raw_scratch is not None and raw_scratch != "" else None
     return ProjectConfig(
         root=root,
         mode=mode,
@@ -51,5 +64,9 @@ def load_project_config(path: Path) -> ProjectConfig:
         vblanks=vblanks,
         timeout_seconds=float(emulator.get("request_timeout_seconds", 5.0)),
         save_state=_resolve(root, save_value) if save_value else None,
+        pcsx_executable=_resolve(root, executable_value) if executable_value else None,
+        lua_bootstrap=_resolve(root, bootstrap_value),
+        bios_path=_resolve(root, bios_value) if bios_value else None,
+        disc_path=_resolve(root, disc_value) if disc_value else None,
+        scratch_address=scratch_address,
     )
-

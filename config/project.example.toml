@@ -16,8 +16,10 @@ executable = ""
 lua_bootstrap = "lua/bootstrap.lua"
 ipc_directory = "runs/ipc"
 request_timeout_seconds = 5.0
+# Optional, operator-confirmed PS1 scratchpad address for the separately gated
+# capability write test. Leave unset until its safety is established.
+# scratch_address = "0x1F8003FC"
 
 [experiment]
 vblanks = 120
 scenario = "fake-straight"
-

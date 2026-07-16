@@ -22,6 +22,8 @@ The supervisor records every state transition, prepares a unique run directory, 
 
 The initial PCSX-Redux boundary uses newline-delimited UTF-8 JSON. Every message has a protocol version, request ID, kind (`request`, `response`, or `event`), monotonic sequence number, and operation. Python rejects malformed, oversized, unsupported-version, duplicate/out-of-order, and mismatched-response messages. The production transport may be a file pair or localhost socket; it must preserve the same envelope.
 
+Phase 3A selects a localhost-only TCP transport. Python opens an ephemeral listener on `127.0.0.1` before launching PCSX-Redux and passes the endpoint plus a random session token only through the child environment. Lua connects with PCSX-Redux's bundled Luv, validates requests, and dispatches them on the emulator main-loop safety context. Quitting closes the socket. No listener is exposed on LAN interfaces.
+
 ## Artifacts
 
 SQLite is the canonical experiment index and transition history. Each `runs/<run-id>/` directory contains proposal/metadata JSON, telemetry JSONL, logs, and later screenshots/GPU data. Large copyrighted memory or executable dumps are forbidden.
@@ -29,4 +31,3 @@ SQLite is the canonical experiment index and transition history. Each `runs/<run
 ## Failure behavior
 
 Launch errors become `FAILED`, budget expiry becomes `TIMED_OUT`, explicit stops become `ABORTED`, and safety violations become `QUARANTINED`. A crash after patching still triggers restoration when the adapter remains reachable. The next real launch must verify original bytes before applying another patch. Fake runs exercise these paths without private assets.
-

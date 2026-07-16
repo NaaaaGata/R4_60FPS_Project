@@ -27,5 +27,12 @@ Set executable overrides in environment variables rather than committing local p
 5. Prove a known fake/scratch RAM write is restored after success, timeout, and bridge disconnect before targeting game code.
 6. Capture a deterministic baseline and store executable identity with it.
 
-The repository currently has no verified host shim, so `mode = "real"` exits with an explanation rather than guessing an emulator API.
+The Phase 3A host shim and capability transport are implemented. Run the read-only smoke test with:
 
+```bash
+r4-autolab pcsx-capabilities
+```
+
+This command uses bundled OpenBIOS and no game image by default. It stores its report under `runs/capabilities/`. Do not pass `--allow-scratch-write` unless every read-only check passes and an operator has independently confirmed a non-code scratchpad address; an address is never guessed automatically.
+
+General `mode = "real"` experiments remain disabled. Phase 3A capability success does not authorize game loading, breakpoints, patches, or address research.

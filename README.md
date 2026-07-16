@@ -27,6 +27,7 @@ Generated artifacts are under `runs/<run-id>/`; SQLite is `runs/experiments.sqli
 
 ```bash
 r4-autolab doctor
+r4-autolab pcsx-capabilities
 r4-autolab init-config
 r4-autolab inspect-input /path/to/owned/file
 r4-autolab baseline --scenario fake-straight
@@ -44,13 +45,12 @@ Use `--config /path/to/project.toml` before the subcommand to select another pro
 
 Never commit a disc image, BIOS, executable, save state, or raw capture. Store them in ignored directories (`private/`, `input/`, `states/`, or `captures/raw/`) or outside the repository. `inspect-input` emits only filename, size, SHA-256, format, and direct PS-X EXE header metadata; it does not dump content.
 
-Real mode remains fail-closed until an installed PCSX-Redux build has a verified host shim for the Lua API. See [setup](docs/SETUP.md), [experiment protocol](docs/EXPERIMENT_PROTOCOL.md), and [safety policy](docs/SAFETY.md).
+The read-only PCSX-Redux capability bridge is available, while general real experiments remain fail-closed. See [PCSX-Redux compatibility](docs/PCSX_REDUX_COMPATIBILITY.md), [setup](docs/SETUP.md), [experiment protocol](docs/EXPERIMENT_PROTOCOL.md), and [safety policy](docs/SAFETY.md).
 
 ## Current limitations
 
-- PCSX-Redux CLI flags and Lua APIs vary by build and have not been verified locally.
+- Phase 3A is verified against the local arm64 PCSX-Redux build documented in `docs/PCSX_REDUX_COMPATIBILITY.md`; other builds may differ.
 - Campaign execution/Codex candidate generation is intentionally disabled; campaign budget validation is dry-run only.
 - Ghidra headless export, visual corruption heuristics, GPU/VRAM capture, and save-state/input replay are not connected.
 - Disc images are hashed but their embedded `PS-X EXE` is not extracted by the MVP.
 - No real R4 addresses or executable identity are confirmed yet.
-
