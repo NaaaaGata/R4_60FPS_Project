@@ -1,5 +1,7 @@
 # R4 AutoLab
 
+Current phase-by-phase implementation status is tracked in [PROGRESS.md](PROGRESS.md).
+
 R4 AutoLab is a reproducible, safety-first experiment supervisor for researching the PlayStation game *R4 -RIDGE RACER TYPE 4-*. Its purpose is to measure the relationship between VBlank, rendering, physics, AI, timers, and buffers before any 60 fps patch is attempted.
 
 The current MVP provides a complete asset-free fake experiment path: configuration, environment diagnosis, input hashing/header inspection, SQLite lifecycle history, JSONL telemetry, checked RAM patching and restoration, baseline/candidate evaluation, reporting, and a versioned Lua/JSONL bridge boundary. It does **not** yet claim a working PCSX-Redux integration or a real-game 60 fps patch.
