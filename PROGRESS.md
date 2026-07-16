@@ -20,6 +20,7 @@
 | Deterministic race trace | COMPLETE FOR PUBLISHED CANDIDATES | 600 VBlanks; bounded ordered Read/Write phases; public vehicle addresses disproven |
 | Real static correlation | COMPLETE FOR BASE + RACE OVERLAY | Stack false-positive rejection plus active overlay and object/function mapping |
 | Race timing model | COMPLETE FOR ONE STATE | Physics/AI dispatcher, camera, timer, main loop, and raw displayed image all 30 Hz |
+| Scratch restoration gate | COMPLETE FOR ONE NON-CODE WORD | Five scenarios / 1,920 VBlanks unaccessed; paused write/read/restore PASS |
 
 Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; SAFE PATCH EVIDENCE NOT YET ESTABLISHED**.
 
@@ -328,3 +329,14 @@ Date: 2026-07-17 JST
 ### Gate decision
 
 The race update, physics/AI, camera, timer, HUD/render work, and displayed image are currently coupled at 30 Hz. Doubling the integrated loop is unsafe and no isolated render-only candidate is yet supported. Patch generation therefore remains disabled. Full evidence is in `docs/R4_TIMING_MODEL.md`.
+
+## Section 14 — Scratchpad read-only audit and restoration proof
+
+Date: 2026-07-17 JST
+
+- Added `audit-scratch`, restricted to one aligned word inside the PS1 scratchpad and using bounded Read/Write breakpoints.
+- `0x1F8003FC` remained `00000000` with zero accesses across all five deterministic scenarios and 1,920 total VBlanks; the test was repeated after the memory backend correction.
+- The first explicit write test failed read-back using `getMemoryAsFile().writeAt`, then ran restoration, shutdown, and cleanup. No alternate game address was tried.
+- Official `PCSX.getScratchPtr()` is now used only for fully range-checked scratchpad requests. All other memory retains the safer File API.
+- The corrected paused test verified `00000000 -> a5a5a5a5 -> 00000000`; scratch write, restoration, shutdown, and child cleanup all PASS.
+- No R4 candidate address, game code, disc image, BIOS, or save-state content was modified. This proves bridge restoration only, not a patch candidate.

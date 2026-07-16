@@ -50,6 +50,7 @@ from .function_trace import trace_function_cadence
 from .overlay_probe import probe_runtime_overlay
 from .targeted_trace import parse_target_watch, trace_targeted_addresses
 from .render_cadence import measure_render_cadence
+from .scratch_audit import audit_scratch_location
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -471,6 +472,34 @@ def command_render_cadence(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "PASS" else 2
 
 
+def command_audit_scratch(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for scratch auditing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for scratch auditing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    report_path, report = audit_scratch_location(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        int(args.address, 0),
+        tuple(definitions.values()),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -766,6 +795,12 @@ def build_parser() -> argparse.ArgumentParser:
     render_cadence.add_argument("--vblanks", type=int, default=120)
     render_cadence.add_argument("--timeout", type=float, default=60.0)
     render_cadence.set_defaults(func=command_render_cadence)
+
+    scratch_audit = subparsers.add_parser("audit-scratch")
+    scratch_audit.add_argument("--address", required=True)
+    scratch_audit.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    scratch_audit.add_argument("--timeout", type=float, default=60.0)
+    scratch_audit.set_defaults(func=command_audit_scratch)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)

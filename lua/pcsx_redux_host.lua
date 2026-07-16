@@ -4,6 +4,8 @@ Host.__index = Host
 local MAX_MESSAGE_BYTES = 1024 * 1024
 local MAX_MEMORY_BYTES = 65536
 local ADDRESS_SPACE_SIZE = 0x100000000
+local SCRATCH_START = 0x1f800000
+local SCRATCH_END = 0x1f800400
 local PAD_BUTTON_NAMES = {
     UP = true, DOWN = true, LEFT = true, RIGHT = true,
     CROSS = true, CIRCLE = true, SQUARE = true, TRIANGLE = true,
@@ -223,6 +225,13 @@ function Host:get_cpu_cycles() return tonumber(PCSX.getCPUCycles()) end
 
 function Host:read_memory(address, size)
     address, size = safe_memory_range(address, size)
+    if address >= SCRATCH_START and address + size <= SCRATCH_END then
+        local scratch = PCSX.getScratchPtr()
+        local result = {}
+        local offset = address - SCRATCH_START
+        for index = 0, size - 1 do result[#result + 1] = string.char(tonumber(scratch[offset + index])) end
+        return table.concat(result)
+    end
     local buffer = self.memory:readAt(size, address)
     local data = tostring(buffer)
     assert(#data == size, 'short memory read')
@@ -246,6 +255,12 @@ end
 function Host:write_memory(address, data)
     assert(type(data) == 'string', 'memory data must be a byte string')
     address = safe_memory_range(address, #data)
+    if address >= SCRATCH_START and address + #data <= SCRATCH_END then
+        local scratch = PCSX.getScratchPtr()
+        local offset = address - SCRATCH_START
+        for index = 1, #data do scratch[offset + index - 1] = data:byte(index) end
+        return
+    end
     local written = self.memory:writeAt(data, address)
     assert(tonumber(written) == #data, 'short memory write')
 end

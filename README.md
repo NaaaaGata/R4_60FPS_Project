@@ -44,6 +44,7 @@ r4-autolab trace-functions --address 0x80038338 --vblanks 600 --max-hits 512
 r4-autolab trace-addresses --watch player_x:0x800ABCF0:4 --vblanks 600
 r4-autolab probe-overlay --address 0x80114780 --size 64
 r4-autolab render-cadence --vblanks 120
+r4-autolab audit-scratch --address 0x1F8003FC --timeout 60
 r4-autolab r4-observe --cue /path/to/owned/disc.cue --vblanks 600
 r4-autolab baseline --scenario fake-straight
 r4-autolab experiment --proposal config/fake_candidate.example.json
@@ -62,6 +63,8 @@ Use `--config /path/to/project.toml` before the subcommand to select another pro
 Never commit a disc image, BIOS, executable, save state, or raw capture. Store them in ignored directories (`private/`, `input/`, `states/`, or `captures/raw/`) or outside the repository. `inspect-input` emits only filename, size, SHA-256, format, and direct PS-X EXE header metadata; it does not dump content.
 
 The manual capture command auto-detects a verified private R4 Japanese CUE, starts PCSX-Redux without test mode, and waits for one Enter press before pausing and saving ignored raw artifacts. It then performs three fresh-process reload checks and updates only ignored `config/project.toml`. See [manual state capture](docs/MANUAL_STATE_CAPTURE.md), [PCSX-Redux compatibility](docs/PCSX_REDUX_COMPATIBILITY.md), [setup](docs/SETUP.md), [experiment protocol](docs/EXPERIMENT_PROTOCOL.md), and [safety policy](docs/SAFETY.md).
+
+`audit-scratch` is read-only. The separate `pcsx-capabilities --allow-scratch-write --scratch-address ...` path must remain explicitly gated and may be used only after an audit; see [scratchpad safety audit](docs/SCRATCH_AUDIT.md).
 
 ## Current limitations
 
