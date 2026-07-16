@@ -40,4 +40,3 @@ Date: 2026-07-17 JST
 - Initial MVP: `33059d4`
 - Phase 3A bridge: `d3f2af0`
 - Phase 3A formatting follow-up: `96a2281`
-
