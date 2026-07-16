@@ -37,4 +37,3 @@ def load_static_export(path: Path) -> StaticExportSummary:
         xref_count=len(xrefs),
         requested_addresses=tuple(str(item) for item in addresses),
     )
-

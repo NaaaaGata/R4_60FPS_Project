@@ -38,4 +38,3 @@ def test_fake_export_and_cache_key_are_deterministic(tmp_path: Path) -> None:
     summary = load_static_export(config.output_file)
     assert summary.requested_addresses == ("0x80010000",)
     assert summary.function_count == 0
-
