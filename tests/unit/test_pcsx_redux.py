@@ -64,6 +64,20 @@ class NoopBridge:
     def close(self) -> None: pass
 
 
+class PadBridge(NoopBridge):
+    def __init__(self) -> None:
+        self.operations: list[tuple[str, dict[str, object]]] = []
+
+    def request(self, operation: str, payload: dict[str, object], timeout_seconds: float) -> dict[str, object]:
+        del timeout_seconds
+        self.operations.append((operation, payload))
+        if operation == "set_pad_buttons":
+            return {"buttons": sorted(payload["buttons"])}  # type: ignore[type-var]
+        if operation == "clear_pad_buttons":
+            return {"cleared": 2}
+        return {}
+
+
 def test_adapter_rejects_ambiguous_or_ui_save_state_format(tmp_path: Path) -> None:
     adapter = PCSXReduxAdapter(
         PCSXLaunchOptions(Path("pcsx-redux"), tmp_path / "bootstrap.lua"),
@@ -71,3 +85,17 @@ def test_adapter_rejects_ambiguous_or_ui_save_state_format(tmp_path: Path) -> No
     )
     with pytest.raises(ValueError, match="uncompressed"):
         adapter.load_state(tmp_path / "ui-state.gz")
+
+
+def test_adapter_uses_explicit_pad_override_operations(tmp_path: Path) -> None:
+    bridge = PadBridge()
+    adapter = PCSXReduxAdapter(
+        PCSXLaunchOptions(Path("pcsx-redux"), tmp_path / "bootstrap.lua"),
+        bridge,  # type: ignore[arg-type]
+    )
+    assert adapter.set_pad_buttons(["CROSS", "LEFT"]) == ["CROSS", "LEFT"]
+    assert adapter.clear_pad_buttons() == 2
+    assert bridge.operations == [
+        ("set_pad_buttons", {"buttons": ["CROSS", "LEFT"]}),
+        ("clear_pad_buttons", {}),
+    ]

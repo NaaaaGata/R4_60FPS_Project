@@ -243,6 +243,13 @@ class PCSXReduxAdapter:
     def configure_watches(self, watches: list[dict[str, Any]]) -> int:
         return int(self._request("configure_watches", {"watches": watches})["configured"])
 
+    def set_pad_buttons(self, buttons: list[str]) -> list[str]:
+        result = self._request("set_pad_buttons", {"buttons": buttons})
+        return [str(value) for value in list(result["buttons"])]
+
+    def clear_pad_buttons(self) -> int:
+        return int(self._request("clear_pad_buttons")["cleared"])
+
     def capture_screenshot(self, path: Path) -> None:
         raw_path = path.with_suffix(".raw").resolve()
         metadata_path = path.with_suffix(".json").resolve()

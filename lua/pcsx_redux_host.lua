@@ -4,6 +4,12 @@ Host.__index = Host
 local MAX_MESSAGE_BYTES = 1024 * 1024
 local MAX_MEMORY_BYTES = 65536
 local ADDRESS_SPACE_SIZE = 0x100000000
+local PAD_BUTTON_NAMES = {
+    UP = true, DOWN = true, LEFT = true, RIGHT = true,
+    CROSS = true, CIRCLE = true, SQUARE = true, TRIANGLE = true,
+    L1 = true, L2 = true, L3 = true, R1 = true, R2 = true, R3 = true,
+    START = true, SELECT = true,
+}
 
 local function integer(value, name)
     assert(type(value) == 'number' and value >= 0 and value % 1 == 0, name .. ' must be a non-negative integer')
@@ -64,6 +70,7 @@ function Host.new(json, base64)
         event_sender = nil,
         vblank_target = nil,
         watches = {},
+        pad_overrides = {},
     }, Host)
     return self
 end
@@ -186,7 +193,10 @@ function Host:on_vblank(callback)
 end
 
 function Host:install_quitting_listener()
-    local listener = PCSX.Events.createEventListener('Quitting', function() self:_close_socket() end)
+    local listener = PCSX.Events.createEventListener('Quitting', function()
+        pcall(function() self:clear_pad_overrides() end)
+        self:_close_socket()
+    end)
     self.listeners[#self.listeners + 1] = listener
 end
 
@@ -278,6 +288,50 @@ function Host:clear_breakpoint(identifier)
     self.breakpoints[identifier] = nil
 end
 
+function Host:_primary_pad()
+    assert(PCSX.SIO0 and PCSX.SIO0.slots and PCSX.SIO0.slots[1], 'SIO0 slot 1 is unavailable')
+    local pad = PCSX.SIO0.slots[1].pads and PCSX.SIO0.slots[1].pads[1]
+    assert(pad, 'SIO0 slot 1 pad 1 is unavailable')
+    return pad
+end
+
+function Host:clear_pad_overrides()
+    local pad = self:_primary_pad()
+    local cleared = 0
+    for name, _ in pairs(self.pad_overrides) do
+        local button = PCSX.CONSTS.PAD.BUTTON[name]
+        assert(button ~= nil, 'PCSX pad constant disappeared: ' .. tostring(name))
+        pad.clearOverride(button)
+        cleared = cleared + 1
+    end
+    self.pad_overrides = {}
+    return cleared
+end
+
+function Host:set_pad_buttons(buttons)
+    assert(type(buttons) == 'table' and #buttons <= 16, 'pad buttons must be an array of at most 16 names')
+    local requested = {}
+    for _, name in ipairs(buttons) do
+        assert(type(name) == 'string' and PAD_BUTTON_NAMES[name], 'unsupported pad button: ' .. tostring(name))
+        assert(not requested[name], 'duplicate pad button: ' .. name)
+        requested[name] = true
+    end
+    assert(not (requested.LEFT and requested.RIGHT), 'LEFT and RIGHT cannot be overridden together')
+    assert(not (requested.UP and requested.DOWN), 'UP and DOWN cannot be overridden together')
+    self:clear_pad_overrides()
+    local pad = self:_primary_pad()
+    for name, _ in pairs(requested) do
+        local button = PCSX.CONSTS.PAD.BUTTON[name]
+        assert(button ~= nil, 'PCSX pad constant is unavailable: ' .. name)
+        pad.setOverride(button)
+    end
+    self.pad_overrides = requested
+    local active = {}
+    for name, _ in pairs(requested) do active[#active + 1] = name end
+    table.sort(active)
+    return active
+end
+
 function Host:_safe_output_path(path)
     assert(type(path) == 'string' and path:sub(1, #self.output_directory + 1) == self.output_directory .. '/', 'output path is outside capability run directory')
     assert(not path:find('/../', 1, true) and path:sub(-3) ~= '/..', 'output path traversal rejected')
@@ -332,7 +386,7 @@ function Host:dispatch(operation, payload)
         }
     elseif operation == 'pause' then PCSX.pauseEmulator(); return { paused = true }
     elseif operation == 'resume' then PCSX.resumeEmulator(); return { resumed = true }
-    elseif operation == 'shutdown' then PCSX.quit(0); return { shutting_down = true }
+    elseif operation == 'shutdown' then self:clear_pad_overrides(); PCSX.quit(0); return { shutting_down = true }
     elseif operation == 'get_cpu_cycles' then return { cycles = tonumber(PCSX.getCPUCycles()) }
     elseif operation == 'get_vblank_count' then return { count = self.vblank_count }
     elseif operation == 'run_vblanks' then
@@ -342,6 +396,8 @@ function Host:dispatch(operation, payload)
         PCSX.resumeEmulator()
         return { target = self.vblank_target }
     elseif operation == 'get_registers' then return register_snapshot()
+    elseif operation == 'set_pad_buttons' then return { buttons = self:set_pad_buttons(payload.buttons) }
+    elseif operation == 'clear_pad_buttons' then return { cleared = self:clear_pad_overrides() }
     elseif operation == 'configure_watches' then
         assert(type(payload.watches) == 'table' and #payload.watches <= 64, 'invalid watch list')
         self.watches = {}

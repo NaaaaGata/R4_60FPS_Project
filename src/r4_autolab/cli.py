@@ -43,7 +43,8 @@ from .ghidra.runner import (
 )
 from .campaign import CampaignBudget, CampaignRunner
 from .codex_client import FakeCodexClient
-from .state_capture import run_manual_capture
+from .state_capture import discover_r4_assets, run_manual_capture
+from .input_replay import load_input_scenarios, run_real_input_replays
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -287,6 +288,39 @@ def command_capture_manual_state(args: argparse.Namespace) -> int:
     return 2 if result["validation_status"] == "FAIL" else 0
 
 
+def command_replay_input(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for deterministic input replay")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for deterministic input replay")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    names = list(args.scenario) if args.scenario else list(definitions)
+    unknown = sorted(set(names) - set(definitions))
+    if unknown:
+        raise ValueError("unknown input scenarios: " + ", ".join(unknown))
+    report_path, report = run_real_input_replays(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        [definitions[name] for name in names],
+        attempts=int(args.attempts),
+        sample_every=int(args.sample_every),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -487,6 +521,14 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--timeout", type=float, default=30.0)
     capture.add_argument("--no-shutdown", action="store_true")
     capture.set_defaults(func=command_capture_manual_state)
+
+    replay_input = subparsers.add_parser("replay-input")
+    replay_input.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    replay_input.add_argument("--scenario", action="append")
+    replay_input.add_argument("--attempts", type=int, default=3)
+    replay_input.add_argument("--sample-every", type=int, default=60)
+    replay_input.add_argument("--timeout", type=float, default=60.0)
+    replay_input.set_defaults(func=command_replay_input)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)

@@ -16,6 +16,7 @@
 | Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
 | Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
 | Race-state capture | COMPLETE | One-Enter raw capture and three-process deterministic reload PASS |
+| Deterministic input | COMPLETE | Official Lua Pad override; five scenarios × three attempts PASS |
 
 Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
 
@@ -231,3 +232,30 @@ Date: 2026-07-17 JST
 - `pytest`: 46 passed.
 - `mypy src`: success for 29 source files.
 - No R4 memory write or patch was performed.
+
+## Section 10 — Deterministic input replay
+
+Date: 2026-07-17 JST
+
+### Implementation
+
+- Added official PCSX-Redux Pad override operations for controller 1, with a strict 16-button allowlist and contradictory-direction rejection.
+- Added VBlank-bounded replay, per-scenario canonical SHA-256, 60-VBlank candidate/screenshot sampling, and fresh-process attempts.
+- Input is released after each run, on Python exceptions, before bridge shutdown, and on the Lua `Quitting` event.
+- Added the required neutral, acceleration, left, right, and acceleration-plus-steering scenarios.
+
+### Real verification
+
+- Five scenarios × three attempts: **PASS**.
+- Every scenario had identical complete candidate/screenshot trajectories across all three attempts.
+- Every scenario changed the visible screen and acknowledged final input release.
+- Left, right, and acceleration-plus-left produced distinct final screen hashes; the camera candidate moved in opposite directions for left/right.
+- No PCSX-Redux child remained and no game memory write or patch occurred.
+
+### Input identities
+
+- `neutral-120`: `72917ed36ba5cc81c29f2b5e82645f4cd33fd2229b68305be0e62e320c3ee6d8`
+- `accelerate-straight-600`: `53632bf889065e6aea47f6ab054ba1910ae7f5df3c59579744e414ebcf02429a`
+- `steer-left-300`: `cc80765cf7e03e2705273c4fbd29a0568f1f9e57fd78a489f7312b5c3879c387`
+- `steer-right-300`: `cc549a7914be79870911596997eb5b140e78fe52f6b1a154abf1ce70d6ebee06`
+- `accelerate-and-steer-600`: `d4654a9d48923549cac753a435e6f1793face25d122c91f1a85f793245fb1040`

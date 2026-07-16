@@ -23,3 +23,7 @@ Phase 3A uses a Python server bound exactly to `127.0.0.1` and a Lua/Luv client.
 ## ADR-006: Raw screenshots and explicit raw save states
 
 PCSX-Redux returns screenshot pixels as a Slice, so Phase 3A writes bounded raw data plus JSON metadata without adding an image dependency. Lua save-state APIs use uncompressed protobuf data while UI states are gzip-compressed; the bridge accepts only explicitly named `.rawstate` files and rejects ambiguous/UI formats.
+
+## ADR-007: Deterministic input uses the emulator Pad override API
+
+Input replay uses PCSX-Redux's documented `PCSX.SIO0.slots[1].pads[1].setOverride` and `clearOverride` methods. This keeps input VBlank-aligned and inside the emulator process, avoids macOS accessibility permissions and timing jitter from OS-level events, and permits explicit release in every cleanup path. Input definitions are bounded JSON data with canonical SHA-256 identities; no new runtime dependency is added.

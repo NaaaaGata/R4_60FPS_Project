@@ -38,6 +38,7 @@ r4-autolab init-config
 r4-autolab inspect-input /path/to/owned/file
 r4-autolab inspect-disc --cue /path/to/owned/disc.cue --extract-directory private/extracted
 r4-autolab capture-manual-state --name race-straight
+r4-autolab replay-input --attempts 3 --sample-every 60
 r4-autolab r4-observe --cue /path/to/owned/disc.cue --vblanks 600
 r4-autolab baseline --scenario fake-straight
 r4-autolab experiment --proposal config/fake_candidate.example.json
@@ -61,5 +62,5 @@ The manual capture command auto-detects a verified private R4 Japanese CUE, star
 
 - Phase 3A is verified against the local arm64 PCSX-Redux build documented in `docs/PCSX_REDUX_COMPATIBILITY.md`; other builds may differ.
 - Real Codex execution remains disabled until a separately audited, non-zero budgeted configuration is introduced.
-- Ghidra real smoke, deterministic controller replay, and GPU/VRAM hashing remain pending.
+- Ghidra real smoke and GPU/VRAM hashing remain pending; deterministic controller replay is connected through the official Lua Pad API.
 - The R4 Japanese disc identity is confirmed, but known runtime addresses still require race-state evidence.
