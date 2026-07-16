@@ -11,16 +11,17 @@ public class R4Prepare extends GhidraScript {
     @Override
     protected void run() throws Exception {
         String[] args = getScriptArgs();
-        if (args.length != 4) {
-            throw new IllegalArgumentException("entry, gp, load address, and payload length are required");
+        if (args.length != 5) {
+            throw new IllegalArgumentException("entry, gp, load address, payload length, and block name are required");
         }
         Address entry = toAddr(args[0]);
         long gpValue = Long.decode(args[1]);
         Address loadAddress = toAddr(args[2]);
         long payloadLength = Long.parseLong(args[3]);
+        String blockName = args[4];
         Memory memory = currentProgram.getMemory();
-        MemoryBlock payload = memory.getBlock("R4_PAYLOAD");
-        if (payload == null) throw new IllegalStateException("R4_PAYLOAD block was not created");
+        MemoryBlock payload = memory.getBlock(blockName);
+        if (payload == null) throw new IllegalStateException(blockName + " block was not created");
         if (!payload.getStart().equals(loadAddress)) {
             throw new IllegalStateException(
                 "binary loader base mismatch: expected " + loadAddress + " got " + payload.getStart()

@@ -47,9 +47,9 @@ public class R4Export extends GhidraScript {
 
     private static String hex(Address address) { return String.format("0x%08X", address.getOffset()); }
 
-    private static String fileOffset(Address address, MemoryBlock payload) {
+    private static String fileOffset(Address address, MemoryBlock payload, long sourceFileOffset) {
         if (payload == null || !payload.contains(address)) return "unknown";
-        return String.format("0x%X", 0x800 + address.subtract(payload.getStart()));
+        return String.format("0x%X", sourceFileOffset + address.subtract(payload.getStart()));
     }
 
     private String inputHash() throws Exception {
@@ -72,6 +72,15 @@ public class R4Export extends GhidraScript {
         List<String> requested = new ArrayList<>();
         for (int index = 1; index < args.length; index++) requested.add(args[index]);
         MemoryBlock payload = currentProgram.getMemory().getBlock("R4_PAYLOAD");
+        long sourceFileOffset = 0x800;
+        if (payload == null) {
+            payload = currentProgram.getMemory().getBlock("R4_OVERLAY");
+            sourceFileOffset = 0;
+        }
+        if (payload == null && !requested.isEmpty()) {
+            payload = currentProgram.getMemory().getBlock(toAddr(requested.get(0)));
+            sourceFileOffset = 0;
+        }
         Address analysisBase = payload == null ? currentProgram.getImageBase() : payload.getStart();
         try (PrintWriter out = new PrintWriter(new File(args[0]), "UTF-8")) {
             out.println("{");
@@ -91,7 +100,7 @@ public class R4Export extends GhidraScript {
                 first = false;
                 out.print("    {\"name\":" + quote(function.getName()) +
                     ",\"entry\":" + quote(hex(function.getEntryPoint())) +
-                    ",\"file_offset\":" + quote(fileOffset(function.getEntryPoint(), payload)) +
+                    ",\"file_offset\":" + quote(fileOffset(function.getEntryPoint(), payload, sourceFileOffset)) +
                     ",\"start\":" + quote(hex(function.getBody().getMinAddress())) +
                     ",\"end\":" + quote(hex(function.getBody().getMaxAddress())) + "}");
             }
@@ -184,7 +193,7 @@ public class R4Export extends GhidraScript {
                     first = false;
                     out.print("    {\"requested\":" + quote(value) +
                         ",\"address\":" + quote(hex(instruction.getAddress())) +
-                        ",\"file_offset\":" + quote(fileOffset(instruction.getAddress(), payload)) +
+                        ",\"file_offset\":" + quote(fileOffset(instruction.getAddress(), payload, sourceFileOffset)) +
                         ",\"text\":" + quote(instruction.toString()) +
                         ",\"delay_slot\":" + instruction.isInDelaySlot() +
                         ",\"flow_type\":" + quote(instruction.getFlowType().toString()) + "}");
@@ -226,7 +235,7 @@ public class R4Export extends GhidraScript {
                 first = false;
                 out.print("    {\"function\":" + quote(function.getName()) +
                     ",\"entry\":" + quote(hex(function.getEntryPoint())) +
-                    ",\"file_offset\":" + quote(fileOffset(function.getEntryPoint(), payload)) +
+                    ",\"file_offset\":" + quote(fileOffset(function.getEntryPoint(), payload, sourceFileOffset)) +
                     ",\"completed\":" + result.decompileCompleted() +
                     ",\"c\":" + quote(code) + "}");
             }

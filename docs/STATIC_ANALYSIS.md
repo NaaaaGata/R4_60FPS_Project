@@ -27,3 +27,18 @@ The extracted executable hash matched `95a9dc1e81039d5a404091bf75bb1fb67c32f693f
 Dynamic/static correlation rejected the public camera label at `0x801FFF58`: frequent dynamic writers/readers are ordinary stack prologues/epilogues (`sw/lw ra,0x10(sp)` and `sw/lw s4,0x20(sp)`). Ghidra function boundaries and pseudocode remain hypotheses; MIPS delay slots, bad-data warnings, overlays, and inferred signatures require dynamic confirmation.
 
 The first two real attempts are retained locally as failed evidence: one exposed a Ghidra 12.1.2 string-iterator API incompatibility and an incorrectly decimal-formatted BinaryLoader length; the next exposed incomplete JSON control-character escaping. Both fail-closed paths were corrected and covered by tests before the successful export.
+
+## Runtime overlay mapping
+
+`probe-overlay` compares a bounded runtime fingerprint against owned disc files and can extract only an explicitly bounded matching region into ignored `private/extracted/`. It found race overlay candidates in `R4.BIN` at `0x261A000` and `0x2660000`, separated by `0x46000` bytes. The active runtime entry at `0x80114780` is offset `0x90` from mapped base `0x801146F0`.
+
+Raw overlay import is explicit and cache-keyed:
+
+```bash
+r4-autolab ghidra-export \
+  --input private/extracted/overlays/r4-bin-0261a000.bin \
+  --binary-base 0x801146F0 --binary-length 0x46000 \
+  --entry-point 0x80114780 --block-name R4_OVERLAY
+```
+
+The real overlay export produced 504 function candidates and 494 direct call edges. The region contains mutable data as well as code, so Ghidra output remains a hypothesis and every selected function is dynamically correlated before being assigned a role.

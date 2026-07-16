@@ -70,3 +70,19 @@ def test_binary_loader_arguments_preserve_psx_payload_mapping(tmp_path: Path) ->
     }
     for flag, value in expected_pairs.items():
         assert arguments[arguments.index(flag) + 1] == value
+    pre_index = arguments.index("-preScript")
+    assert arguments[pre_index + 6] == "R4_PAYLOAD"
+
+
+def test_cache_and_arguments_include_overlay_mapping(tmp_path: Path) -> None:
+    input_file = tmp_path / "overlay.bin"
+    input_file.write_bytes(b"overlay")
+    script = tmp_path / "script.java"
+    script.write_text("script", encoding="utf-8")
+    first = cache_key(
+        input_file, script, (0x80114780,), "MIPS:LE:32:default", import_options={"base": 0x801146F0}
+    )
+    second = cache_key(
+        input_file, script, (0x80114780,), "MIPS:LE:32:default", import_options={"base": 0x80120000}
+    )
+    assert first != second

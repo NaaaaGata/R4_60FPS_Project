@@ -87,6 +87,7 @@ def build_headless_args(config: GhidraRunConfig) -> list[str]:
                 f"0x{(config.global_pointer or 0):08X}",
                 f"0x{(config.loader_base_address or 0):08X}",
                 str(config.loader_length or 0),
+                config.loader_block_name or "R4_PAYLOAD",
             ]
         )
     arguments.extend(
@@ -115,13 +116,19 @@ def cache_key(
     addresses: tuple[int, ...],
     processor: str | None,
     additional_script_files: tuple[Path, ...] = (),
+    import_options: dict[str, Any] | None = None,
 ) -> str:
     digest = hashlib.sha256()
     digest.update(_sha256(input_file).encode("ascii"))
     digest.update(_sha256(script_file).encode("ascii"))
     for additional in additional_script_files:
         digest.update(_sha256(additional).encode("ascii"))
-    digest.update(json.dumps({"addresses": addresses, "processor": processor}, sort_keys=True).encode("utf-8"))
+    digest.update(
+        json.dumps(
+            {"addresses": addresses, "processor": processor, "import_options": import_options or {}},
+            sort_keys=True,
+        ).encode("utf-8")
+    )
     return digest.hexdigest()
 
 

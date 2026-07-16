@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+import fcntl
 import json
 import os
 from pathlib import Path
 import platform
 import shutil
 import subprocess
+import tempfile
 from typing import Any, Protocol
 
 from ..models import BreakpointSpec, LaunchConfig, RegisterSnapshot
@@ -121,6 +123,30 @@ class PCSXReduxAdapter:
         self.process: subprocess.Popen[bytes] | None = None
         self.timeout_seconds = 5.0
         self._log_handle: Any = None
+        self._process_lock: Any = None
+
+    def _acquire_process_lock(self) -> None:
+        lock_path = Path(tempfile.gettempdir()) / "r4-autolab-pcsx-redux.lock"
+        handle = lock_path.open("a+", encoding="utf-8")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            handle.close()
+            raise RuntimeError(
+                "another R4 AutoLab PCSX-Redux process is active; wait for it to finish or stop it first"
+            ) from error
+        handle.seek(0)
+        handle.truncate()
+        handle.write(f"pid={os.getpid()}\n")
+        handle.flush()
+        self._process_lock = handle
+
+    def _release_process_lock(self) -> None:
+        if self._process_lock is None:
+            return
+        fcntl.flock(self._process_lock.fileno(), fcntl.LOCK_UN)
+        self._process_lock.close()
+        self._process_lock = None
 
     def _request(self, operation: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.bridge.request(operation, payload or {}, self.timeout_seconds)
@@ -156,15 +182,23 @@ class PCSXReduxAdapter:
                 "R4_AUTOLAB_DEBUGGER": "1" if effective_options.debugger else "0",
             }
         )
-        self._log_handle = (config.run_dir / "pcsx-redux.log").open("wb")
-        self.process = subprocess.Popen(
-            build_pcsx_redux_args(effective_options),
-            stdout=self._log_handle,
-            stderr=subprocess.STDOUT,
-            shell=False,
-            env=environment,
-            cwd=str(config.run_dir),
-        )
+        self._acquire_process_lock()
+        try:
+            self._log_handle = (config.run_dir / "pcsx-redux.log").open("wb")
+            self.process = subprocess.Popen(
+                build_pcsx_redux_args(effective_options),
+                stdout=self._log_handle,
+                stderr=subprocess.STDOUT,
+                shell=False,
+                env=environment,
+                cwd=str(config.run_dir),
+            )
+        except Exception:
+            if self._log_handle is not None:
+                self._log_handle.close()
+                self._log_handle = None
+            self._release_process_lock()
+            raise
         return self.process
 
     def connect(self) -> None:
@@ -268,23 +302,26 @@ class PCSXReduxAdapter:
     def shutdown(self) -> None:
         shutdown_error: Exception | None = None
         try:
-            if self.bridge.connected:
-                self._request("shutdown")
-        except Exception as error:
-            shutdown_error = error
-        finally:
-            self.bridge.close()
-        if self.process is not None and self.process.poll() is None:
-            self.process.terminate()
             try:
-                self.process.wait(timeout=self.timeout_seconds)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=2)
-        self.process = None
-        if self._log_handle is not None:
-            self._log_handle.close()
-            self._log_handle = None
+                if self.bridge.connected:
+                    self._request("shutdown")
+            except Exception as error:
+                shutdown_error = error
+            finally:
+                self.bridge.close()
+            if self.process is not None and self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=self.timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait(timeout=2)
+            self.process = None
+            if self._log_handle is not None:
+                self._log_handle.close()
+                self._log_handle = None
+        finally:
+            self._release_process_lock()
         if shutdown_error is not None:
             raise shutdown_error
 

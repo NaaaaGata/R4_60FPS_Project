@@ -266,13 +266,15 @@ function Host:set_breakpoint(specification)
         hit_count = hit_count + 1
         local ok, message = pcall(function()
             local snapshot = register_snapshot()
+            local hit_vblank = self.vblank_count
+            local hit_cycles = self:get_cpu_cycles()
             PCSX.nextTick(function()
                 self:_emit({
                     kind = 'event', event = 'breakpoint', breakpoint_id = identifier,
                     access = specification.access,
                     pc = snapshot.pc, ra = snapshot.ra, sp = snapshot.sp,
-                    gprs = snapshot.gprs, vblank_index = self.vblank_count,
-                    cpu_cycles = self:get_cpu_cycles(),
+                    gprs = snapshot.gprs, vblank_index = hit_vblank,
+                    cpu_cycles = hit_cycles,
                     accessed_address = tonumber(actual_address), access_width = tonumber(actual_width), cause = tostring(cause),
                 })
             end)

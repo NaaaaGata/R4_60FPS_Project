@@ -46,6 +46,10 @@ from .codex_client import FakeCodexClient
 from .state_capture import discover_r4_assets, run_manual_capture
 from .input_replay import load_input_scenarios, run_real_input_replays
 from .race_trace import trace_r4_race
+from .function_trace import trace_function_cadence
+from .overlay_probe import probe_runtime_overlay
+from .targeted_trace import parse_target_watch, trace_targeted_addresses
+from .render_cadence import measure_render_cadence
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -355,6 +359,118 @@ def command_trace_race(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "PASS" else 2
 
 
+def command_trace_functions(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for function tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for function tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    addresses = tuple(int(value, 0) for value in args.address)
+    report_path, report = trace_function_cadence(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        addresses,
+        vblanks=int(args.vblanks),
+        max_hits=int(args.max_hits),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_probe_overlay(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for overlay probing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for overlay probing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    report_path, report = probe_runtime_overlay(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        int(args.address, 0),
+        size=int(args.size),
+        extract_length=int(args.extract_length, 0) if args.extract_length else None,
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_addresses(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for targeted address tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for targeted address tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    watches = tuple(parse_target_watch(value) for value in args.watch)
+    report_path, report = trace_targeted_addresses(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        watches,
+        vblanks=int(args.vblanks),
+        max_write_hits=int(args.max_hits),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_render_cadence(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for render cadence measurement")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for render cadence measurement")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    report_path, report = measure_render_cadence(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        vblanks=int(args.vblanks),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -503,6 +619,7 @@ def command_ghidra_export(args: argparse.Namespace) -> int:
     loader_length: int | None = None
     entry_point: int | None = None
     global_pointer: int | None = None
+    block_name: str | None = None
     if is_psx_exe:
         entry_point = struct.unpack_from("<I", header, 0x10)[0]
         global_pointer = struct.unpack_from("<I", header, 0x14)[0]
@@ -513,7 +630,32 @@ def command_ghidra_export(args: argparse.Namespace) -> int:
             raise ValueError("PS-X EXE payload range is invalid")
         processor = processor or "MIPS:LE:32:default"
         loader = "BinaryLoader"
-    key = cache_key(input_file, script_file, addresses, processor, (prepare_script,))
+        block_name = "R4_PAYLOAD"
+    elif args.binary_base is not None:
+        loader = "BinaryLoader"
+        loader_base = int(args.binary_base, 0)
+        loader_offset = int(args.binary_file_offset, 0)
+        loader_length = (
+            int(args.binary_length, 0)
+            if args.binary_length
+            else input_file.stat().st_size - loader_offset
+        )
+        if loader_offset < 0 or loader_length <= 0 or loader_offset + loader_length > input_file.stat().st_size:
+            raise ValueError("raw binary import range is invalid")
+        entry_point = int(args.entry_point, 0) if args.entry_point else loader_base
+        global_pointer = int(args.global_pointer, 0) if args.global_pointer else 0
+        processor = processor or "MIPS:LE:32:default"
+        block_name = str(args.block_name)
+    import_options = {
+        "loader": loader,
+        "base": loader_base,
+        "offset": loader_offset,
+        "length": loader_length,
+        "block": block_name,
+        "entry": entry_point,
+        "gp": global_pointer,
+    }
+    key = cache_key(input_file, script_file, addresses, processor, (prepare_script,), import_options)
     output = Path(args.output).resolve() if args.output else Path("runs/static-cache") / key / "export.json"
     output = output.resolve()
     if output.is_file() and not args.force:
@@ -536,7 +678,7 @@ def command_ghidra_export(args: argparse.Namespace) -> int:
         loader_base_address=loader_base,
         loader_file_offset=loader_offset,
         loader_length=loader_length,
-        loader_block_name="R4_PAYLOAD" if is_psx_exe else None,
+        loader_block_name=block_name,
         entry_point=entry_point,
         global_pointer=global_pointer,
     )
@@ -599,6 +741,32 @@ def build_parser() -> argparse.ArgumentParser:
     trace_race.add_argument("--timeout", type=float, default=60.0)
     trace_race.set_defaults(func=command_trace_race)
 
+    trace_functions = subparsers.add_parser("trace-functions")
+    trace_functions.add_argument("--address", action="append", required=True)
+    trace_functions.add_argument("--vblanks", type=int, default=120)
+    trace_functions.add_argument("--max-hits", type=int, default=256)
+    trace_functions.add_argument("--timeout", type=float, default=60.0)
+    trace_functions.set_defaults(func=command_trace_functions)
+
+    overlay = subparsers.add_parser("probe-overlay")
+    overlay.add_argument("--address", required=True)
+    overlay.add_argument("--size", type=int, default=64)
+    overlay.add_argument("--extract-length")
+    overlay.add_argument("--timeout", type=float, default=60.0)
+    overlay.set_defaults(func=command_probe_overlay)
+
+    targeted = subparsers.add_parser("trace-addresses")
+    targeted.add_argument("--watch", action="append", required=True)
+    targeted.add_argument("--vblanks", type=int, default=600)
+    targeted.add_argument("--max-hits", type=int, default=32)
+    targeted.add_argument("--timeout", type=float, default=60.0)
+    targeted.set_defaults(func=command_trace_addresses)
+
+    render_cadence = subparsers.add_parser("render-cadence")
+    render_cadence.add_argument("--vblanks", type=int, default=120)
+    render_cadence.add_argument("--timeout", type=float, default=60.0)
+    render_cadence.set_defaults(func=command_render_cadence)
+
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)
     baseline.add_argument("--id")
@@ -649,6 +817,12 @@ def build_parser() -> argparse.ArgumentParser:
     ghidra_export.add_argument("--timeout", type=float, default=600.0)
     ghidra_export.add_argument("--force", action="store_true")
     ghidra_export.add_argument("--fake", action="store_true")
+    ghidra_export.add_argument("--binary-base")
+    ghidra_export.add_argument("--binary-file-offset", default="0")
+    ghidra_export.add_argument("--binary-length")
+    ghidra_export.add_argument("--entry-point")
+    ghidra_export.add_argument("--global-pointer")
+    ghidra_export.add_argument("--block-name", default="R4_OVERLAY")
     ghidra_export.set_defaults(func=command_ghidra_export)
 
     visual = subparsers.add_parser("visual-check")

@@ -40,6 +40,10 @@ r4-autolab inspect-disc --cue /path/to/owned/disc.cue --extract-directory privat
 r4-autolab capture-manual-state --name race-straight
 r4-autolab replay-input --attempts 3 --sample-every 60
 r4-autolab trace-race --vblanks 600 --breakpoint-vblanks 120 --max-hits 32
+r4-autolab trace-functions --address 0x80038338 --vblanks 600 --max-hits 512
+r4-autolab trace-addresses --watch player_x:0x800ABCF0:4 --vblanks 600
+r4-autolab probe-overlay --address 0x80114780 --size 64
+r4-autolab render-cadence --vblanks 120
 r4-autolab r4-observe --cue /path/to/owned/disc.cue --vblanks 600
 r4-autolab baseline --scenario fake-straight
 r4-autolab experiment --proposal config/fake_candidate.example.json
@@ -63,5 +67,5 @@ The manual capture command auto-detects a verified private R4 Japanese CUE, star
 
 - Phase 3A is verified against the local arm64 PCSX-Redux build documented in `docs/PCSX_REDUX_COMPATIBILITY.md`; other builds may differ.
 - Real Codex execution remains disabled until a separately audited, non-zero budgeted configuration is introduced.
-- Official Ghidra 12.1.2 real headless export and deterministic controller replay are connected; GPU/VRAM command hashing remains pending.
-- The R4 Japanese disc identity is confirmed, but known runtime addresses still require race-state evidence.
+- Official Ghidra 12.1.2 base/overlay export and deterministic controller replay are connected; a raw screenshot-hash fallback confirms 29.97 Hz displayed-image cadence, while GPU command hashing remains unavailable.
+- The R4 Japanese disc identity, active race overlay, player structure, and integrated 30 Hz race loop are confirmed for one captured race state. No evidence-backed render-only 60 fps patch exists yet.

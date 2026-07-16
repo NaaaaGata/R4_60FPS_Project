@@ -14,13 +14,14 @@
 | Phase 4: Static analysis bridge | COMPLETE WITH REAL SMOKE | Official Ghidra 12.1.2, verified PS-X payload mapping, selected dynamic-PC export |
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
 | Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
-| Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
+| Phase 7: First R4 investigation | COMPLETE FOR FIRST RACE TIMING MODEL | Deterministic race, overlay mapping, real vehicle fields, 30 Hz subsystem and display cadence |
 | Race-state capture | COMPLETE | One-Enter raw capture and three-process deterministic reload PASS |
 | Deterministic input | COMPLETE | Official Lua Pad override; five scenarios × three attempts PASS |
 | Deterministic race trace | COMPLETE FOR PUBLISHED CANDIDATES | 600 VBlanks; bounded ordered Read/Write phases; public vehicle addresses disproven |
-| Real static correlation | COMPLETE FOR CAPTURED PCS | Stack prologue/epilogue mapping rejects false camera global |
+| Real static correlation | COMPLETE FOR BASE + RACE OVERLAY | Stack false-positive rejection plus active overlay and object/function mapping |
+| Race timing model | COMPLETE FOR ONE STATE | Physics/AI dispatcher, camera, timer, main loop, and raw displayed image all 30 Hz |
 
-Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
+Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; SAFE PATCH EVIDENCE NOT YET ESTABLISHED**.
 
 ## Section 1 — Baseline audit (Phase 0 through Phase 3A)
 
@@ -304,3 +305,26 @@ Date: 2026-07-17 JST
 - `0x80084C28` / `0x80084D2C`: save/restore `s4` at `0x20(sp)` in `FUN_80084c10`.
 - These instructions explain the apparent `0x801FFF58` camera events as stack reuse. The public camera hypothesis is rejected for this build.
 - Ghidra's function signatures and pseudocode remain hypotheses and are not treated as ground truth.
+
+## Section 13 — Race overlay, real state fields, and timing model
+
+Date: 2026-07-17 JST
+
+### Overlay and object discovery
+
+- Runtime fingerprinting located two owned-disc overlay regions separated by `0x46000`; private bounded extracts remain ignored.
+- Ghidra mapped the active overlay at `0x801146F0`, with race entry `0x80114780`, 504 function candidates, and 494 call edges.
+- The overlay identifies `0x800FFA00 -> 0x800ABCE0` as the player object. Targeted reads confirmed moving position, orientation, speed, rank, lap, and progress fields without scanning RAM.
+
+### Dynamic timing evidence
+
+- Main-loop landmarks and race overlay entry: exactly 300 hits / 600 VBlanks.
+- Vehicle/AI dispatcher `0x80038338`, camera `0x80034178`, lap/timer `0x8003C838`, and frame post-processing `0x8004AA7C`: exactly one hit on each active 30 Hz frame.
+- Player X/Z: 299 changes / 600 at 30.013 Hz; speed-related field changed 267 times.
+- 121 consecutive raw screenshots produced 60 transitions; after the initial sample, every hash repeats for exactly two VBlanks. Displayed-image cadence is 29.97 Hz with 50% duplicate transitions.
+- No memory write, patch, NOP, disc/BIOS modification, or unbounded dump occurred. No PCSX process remained.
+- A host-level nonblocking lock now rejects a second concurrent AutoLab PCSX launch, preventing accidental doubled audio/processes.
+
+### Gate decision
+
+The race update, physics/AI, camera, timer, HUD/render work, and displayed image are currently coupled at 30 Hz. Doubling the integrated loop is unsafe and no isolated render-only candidate is yet supported. Patch generation therefore remains disabled. Full evidence is in `docs/R4_TIMING_MODEL.md`.

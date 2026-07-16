@@ -99,3 +99,20 @@ def test_adapter_uses_explicit_pad_override_operations(tmp_path: Path) -> None:
         ("set_pad_buttons", {"buttons": ["CROSS", "LEFT"]}),
         ("clear_pad_buttons", {}),
     ]
+
+
+def test_adapter_process_lock_rejects_concurrent_autolab_instances(tmp_path: Path) -> None:
+    first = PCSXReduxAdapter(
+        PCSXLaunchOptions(Path("pcsx-redux"), tmp_path / "bootstrap.lua"),
+        NoopBridge(),  # type: ignore[arg-type]
+    )
+    second = PCSXReduxAdapter(
+        PCSXLaunchOptions(Path("pcsx-redux"), tmp_path / "bootstrap.lua"),
+        NoopBridge(),  # type: ignore[arg-type]
+    )
+    first._acquire_process_lock()
+    try:
+        with pytest.raises(RuntimeError, match="another R4 AutoLab PCSX-Redux"):
+            second._acquire_process_lock()
+    finally:
+        first._release_process_lock()

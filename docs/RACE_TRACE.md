@@ -20,3 +20,9 @@ The visible HUD and moving car contradict the all-zero vehicle/speed/RPM fields,
 Breakpoint events include phase, scenario, state/input SHA-256, VBlank, CPU cycle, PC, RA, SP, GPR, address, width, and cause. The installed PCSX callback does not expose old/new values, so both remain explicit nulls with a limitation string; post-phase memory is recorded separately and is not misattributed to individual hits.
 
 Next discovery should use static mapping of the captured in-payload PCs and bounded observation of actual state structures reached from race update/render functions. It must not scan or dump large RAM ranges and must not patch the disproven public candidates.
+
+## Static-guided follow-up
+
+The runtime race entry is an overlay at `0x80114780`. A bounded 64-byte fingerprint located two 0x46000-byte regions in the owned `R4.BIN`; the active region was imported privately at base `0x801146F0`. Ghidra linked the overlay to the player pointer table at `0x800FFA00` and object `0x800ABCE0`.
+
+Targeted reads and bounded writes then confirmed moving X/Z, orientation, speed, rank, lap, and progress fields in that object. Vehicle/AI dispatch, camera, lap/timer, and raw displayed image all advance once per two VBlanks. Exact evidence and limitations are in [R4_TIMING_MODEL.md](R4_TIMING_MODEL.md).
