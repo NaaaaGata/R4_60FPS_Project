@@ -43,6 +43,7 @@ from .ghidra.runner import (
 )
 from .campaign import CampaignBudget, CampaignRunner
 from .codex_client import FakeCodexClient
+from .state_capture import run_manual_capture
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -261,6 +262,31 @@ def command_r4_observe(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_capture_manual_state(args: argparse.Namespace) -> int:
+    config_path = Path(args.config).resolve()
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for manual state capture")
+    cue = Path(args.cue).resolve() if args.cue else config.disc_path
+    bios = Path(args.bios).resolve() if args.bios else config.bios_path
+    output_directory = Path(args.output_directory).resolve() if args.output_directory else None
+    result = run_manual_capture(
+        config.root,
+        config_path,
+        executable,
+        config.lua_bootstrap.resolve(),
+        name=str(args.name),
+        cue=cue,
+        bios=bios,
+        output_directory=output_directory,
+        timeout_seconds=max(float(args.timeout), config.timeout_seconds),
+        no_shutdown=bool(args.no_shutdown),
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 2 if result["validation_status"] == "FAIL" else 0
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -452,6 +478,15 @@ def build_parser() -> argparse.ArgumentParser:
     observe.add_argument("--vblanks", type=int, default=600)
     observe.add_argument("--timeout", type=float, default=30.0)
     observe.set_defaults(func=command_r4_observe)
+
+    capture = subparsers.add_parser("capture-manual-state")
+    capture.add_argument("--name", default="race-straight")
+    capture.add_argument("--cue")
+    capture.add_argument("--bios")
+    capture.add_argument("--output-directory")
+    capture.add_argument("--timeout", type=float, default=30.0)
+    capture.add_argument("--no-shutdown", action="store_true")
+    capture.set_defaults(func=command_capture_manual_state)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)

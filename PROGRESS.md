@@ -15,6 +15,7 @@
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
 | Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
 | Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
+| Race-state capture | IMPLEMENTED / REAL CAPTURE PENDING | One-Enter raw capture, source hashes, three-process validation, ignored config registration |
 
 Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
 
@@ -180,3 +181,27 @@ Date: 2026-07-17 JST
 - First owned-disc identity and bounded boot Read/Write observation: complete.
 - Final requirement matrix and exact resume conditions: `docs/FINAL_AUDIT.md`.
 - No 60 fps patch or success claim was produced.
+
+## Section 8 — Interactive race-state capture implementation
+
+Date: 2026-07-17 JST
+
+### Implemented
+
+- Added `capture-manual-state` with automatic verified CUE/BIN and BIOS/OpenBIOS discovery.
+- Normal interactive PCSX launch excludes `-testmode` while retaining the authenticated Lua bridge, interpreter, and debugger.
+- The manual prompt is shown only after handshake and a sampled PC enters the verified R4 payload.
+- Enter triggers pause-first register/counter/watch capture, raw screenshot, raw-protobuf state creation, source/state hashing, and same-process reload.
+- Default cleanup launches three independent state-validation processes and records initial plus 60-VBlank evidence.
+- Local real-mode paths and the state are written only to ignored `config/project.toml`; generated artifacts remain under ignored `states/` and `runs/`.
+
+### Verification before real capture
+
+- `pytest`: 45 passed.
+- `mypy src`: success for 29 source files.
+- `git check-ignore`: state, raw screenshot, validation report, local config, CUE, and BIN all matched explicit ignore rules.
+- Real extended PCSX capability smoke remains PASS, including raw-state roundtrip and breakpoint lifecycle.
+
+### Next transition
+
+The implementation is ready to launch. The only pending human action is navigating R4 to a stable straight during a race and pressing Enter once; validation and subsequent read-only analysis continue automatically.

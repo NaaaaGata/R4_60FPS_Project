@@ -10,6 +10,8 @@ executable_sha256 = ""
 disc_path = ""
 bios_path = ""
 save_state = ""
+# Private real-mode values belong only in ignored config/project.toml. The
+# capture-manual-state command can discover and register them automatically.
 
 [emulator]
 executable = ""
@@ -23,3 +25,4 @@ request_timeout_seconds = 5.0
 [experiment]
 vblanks = 120
 scenario = "fake-straight"
+# A verified manual capture changes the ignored local scenario to race-straight.
