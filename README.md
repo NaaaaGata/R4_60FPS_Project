@@ -53,6 +53,7 @@ r4-autolab trace-summary <run-id>
 r4-autolab report <run-id>
 r4-autolab campaign --config config/budgets.example.toml
 r4-autolab campaign --config config/budgets.example.toml --execute --fake-codex
+r4-autolab campaign --config config/budgets.real.example.toml --execute --real-codex
 r4-autolab stop
 ```
 
@@ -69,6 +70,6 @@ The manual capture command auto-detects a verified private R4 Japanese CUE, star
 ## Current limitations
 
 - Phase 3A is verified against the local arm64 PCSX-Redux build documented in `docs/PCSX_REDUX_COMPATIBILITY.md`; other builds may differ.
-- Real Codex execution remains disabled until a separately audited, non-zero budgeted configuration is introduced.
+- Real Codex proposal-only execution is explicitly available with a non-zero finite budget and an empty evidence catalog; it cannot launch a RAM experiment until a reviewed candidate exists.
 - Official Ghidra 12.1.2 base/overlay export and deterministic controller replay are connected; a raw screenshot-hash fallback confirms 29.97 Hz displayed-image cadence, while GPU command hashing remains unavailable.
 - The R4 Japanese disc identity, active race overlay, player structure, and integrated 30 Hz race loop are confirmed for one captured race state. No evidence-backed render-only 60 fps patch exists yet.

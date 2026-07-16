@@ -3,7 +3,7 @@
   "$id": "https://r4-autolab.local/schemas/experiment_proposal.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "hypothesis", "target_version", "changes", "stop_conditions", "evaluation_profile"],
+  "required": ["id", "hypothesis", "target_version", "changes", "predicted_effects", "stop_conditions", "evaluation_profile"],
   "properties": {
     "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$"},
     "hypothesis": {"type": "string", "minLength": 1},
@@ -22,7 +22,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["address", "width", "expected_original_hex", "replacement_hex", "evidence"],
+        "required": ["address", "width", "expected_original_hex", "replacement_hex", "instruction_before", "instruction_after", "evidence"],
         "properties": {
           "address": {"type": "string", "pattern": "^0x[0-9a-fA-F]{8}$"},
           "width": {"enum": [1, 2, 4]},
@@ -34,9 +34,18 @@
         }
       }
     },
-    "predicted_effects": {"type": "object"},
+    "predicted_effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["render_hz", "physics_hz", "game_speed_ratio", "notes"],
+      "properties": {
+        "render_hz": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "physics_hz": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "game_speed_ratio": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "notes": {"anyOf": [{"type": "string"}, {"type": "null"}]}
+      }
+    },
     "stop_conditions": {"type": "array", "items": {"type": "string"}},
     "evaluation_profile": {"type": "string", "minLength": 1}
   }
 }
-

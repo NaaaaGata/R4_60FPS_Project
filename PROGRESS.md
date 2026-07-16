@@ -13,7 +13,7 @@
 | Phase 3B: PCSX-Redux remaining bridge | COMPLETE | Extended real smoke: breakpoint lifecycle and raw-state roundtrip passed |
 | Phase 4: Static analysis bridge | COMPLETE WITH REAL SMOKE | Official Ghidra 12.1.2, verified PS-X payload mapping, selected dynamic-PC export |
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
-| Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
+| Phase 6: Codex research loop | COMPLETE WITH REAL PROPOSAL SMOKE | Signed CLI, strict schema, one-call finite budget, zero-emulator evidence gate |
 | Phase 7: First R4 investigation | COMPLETE FOR FIRST RACE TIMING MODEL | Deterministic race, overlay mapping, real vehicle fields, 30 Hz subsystem and display cadence |
 | Race-state capture | COMPLETE | One-Enter raw capture and three-process deterministic reload PASS |
 | Deterministic input | COMPLETE | Official Lua Pad override; five scenarios × three attempts PASS |
@@ -21,6 +21,7 @@
 | Real static correlation | COMPLETE FOR BASE + RACE OVERLAY | Stack false-positive rejection plus active overlay and object/function mapping |
 | Race timing model | COMPLETE FOR ONE STATE | Physics/AI dispatcher, camera, timer, main loop, and raw displayed image all 30 Hz |
 | Scratch restoration gate | COMPLETE FOR ONE NON-CODE WORD | Five scenarios / 1,920 VBlanks unaccessed; paused write/read/restore PASS |
+| 60 fps candidate gate | COMPLETE: NO SAFE CHANGE | Integrated 30 Hz loop; zero R4 patches; real Codex returned no change |
 
 Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; SAFE PATCH EVIDENCE NOT YET ESTABLISHED**.
 
@@ -78,6 +79,8 @@ Date: 2026-07-17 JST
 
 Date: 2026-07-17 JST
 
+Historical snapshot: the blocker below was true at Section 3 and was resolved in Section 12.
+
 ### Implemented
 
 - Official `analyzeHeadless` discovery, argument-array builder, timeout, isolated temporary project, logs, and content-addressed cache.
@@ -125,6 +128,8 @@ Date: 2026-07-17 JST
 
 Date: 2026-07-17 JST
 
+Historical snapshot: real execution was disabled at this stage and was enabled safely in Section 15.
+
 ### Implemented
 
 - Exchangeable `CodexClient`, deterministic Fake client, and explicitly disabled real `codex exec` client.
@@ -148,6 +153,8 @@ Date: 2026-07-17 JST
 ## Section 6 — Phase 7 first R4 investigation
 
 Date: 2026-07-17 JST
+
+Historical snapshot: these boot-only blockers were resolved by Sections 9–13.
 
 ### Confirmed target
 
@@ -340,3 +347,34 @@ Date: 2026-07-17 JST
 - Official `PCSX.getScratchPtr()` is now used only for fully range-checked scratchpad requests. All other memory retains the safer File API.
 - The corrected paused test verified `00000000 -> a5a5a5a5 -> 00000000`; scratch write, restoration, shutdown, and child cleanup all PASS.
 - No R4 candidate address, game code, disc image, BIOS, or save-state content was modified. This proves bridge restoration only, not a patch candidate.
+
+## Section 15 — Evidence-gated candidate and real Codex campaign
+
+Date: 2026-07-17 JST
+
+- Strict Structured Outputs schema now requires every declared property, rejects undeclared fields, and gives predicted effects a fixed nullable shape.
+- Real Codex discovery records executable identity and requires strict macOS code-signature verification before invocation.
+- Added `config/budgets.real.example.toml`: one call, one proposal, 300 seconds, one change maximum, and non-zero finite accounting budget.
+- Real invocation is ephemeral, read-only, ignores user configuration, disables web search, and writes only ignored campaign artifacts.
+- Supervisor-side evidence catalog contains zero reviewed changes. Any write proposal is rejected before emulator launch; no-change stops cleanly.
+- One real signed Codex 0.144.5 call completed in 7.74 seconds and returned `changes=[]`, classified `NO_SAFE_CHANGE`; emulator experiments and R4 writes remained zero.
+- A final bounded GPU-function trace confirmed submit calls only on 60 of 120 VBlanks: `0x8009331C` and `0x80093150` once per active frame, `0x800930E0` twice per active frame.
+- Two prior strict-schema errors are retained as FAILED SQLite campaigns with exact logs and zero emulator experiments.
+- Phase L/M patch execution is SKIP by evidence gate, not incomplete automation. Detailed accounting is in `docs/R4_CANDIDATE_RESULTS.md`.
+
+### macOS blocked legacy CLI
+
+An attempted version check touched stale Homebrew Cask Codex 0.125.0. macOS correctly blocked it because its signature was invalid and moved it to Trash. No bypass was used. The active VS Code extension ships separate Codex 0.144.5; its on-disk signature and designated requirement passed before the real campaign. The blocked legacy binary was never used for a campaign.
+
+## Section 16 — Final acceptance and delivery
+
+Date: 2026-07-17 JST
+
+- `pytest`: 67 passed.
+- `mypy src`: success for 36 source files.
+- `doctor`: Python, Git, current Codex, PCSX-Redux, Ghidra, and Java detected.
+- Final extended PCSX smoke: launch, IPC, handshake, pause/resume, VBlank, counters, registers, memory read, screenshot, breakpoint lifecycle, raw-state roundtrip, shutdown, and process cleanup all PASS.
+- Real campaign budget dry-run PASS; real one-call proposal campaign completed `NO_SAFE_CHANGE` with zero emulator experiments.
+- Tracked-file audit found no state, run, private asset, BIN, CUE, extracted executable, or raw capture.
+- `git diff --check`: clean. `.metals/` and `.vscode/` remain unrelated untracked IDE directories and are excluded.
+- Final matrix, exact unresolved items, and reproduction commands are in `docs/FINAL_AUDIT.md`.

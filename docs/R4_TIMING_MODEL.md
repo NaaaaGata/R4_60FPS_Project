@@ -15,8 +15,44 @@ This model applies only to the verified `SLPS-01800` executable SHA-256 `95a9dc1
 | Lap/timer logic | `FUN_8003C838` | 60 / 120 | confirmed 30 Hz |
 | Frame post-processing | `FUN_8004AA7C` | 300 / 600 | confirmed 30 Hz |
 | Raw displayed image | `PCSX.GPU.takeScreenShot()` SHA-256 | 60 changes / 120 intervals | confirmed 29.97 Hz |
+| GPU submit A | `FUN_8009331C` | 60 / 120 | confirmed 30 Hz |
+| GPU submit B | `FUN_80093150` | 60 / 120 | confirmed 30 Hz |
+| GPU submit C | `FUN_800930E0` | 120 calls on 60 / 120 VBlanks | confirmed two calls per 30 Hz frame |
 
 The screenshot sequence contains one initial sample followed by runs of exactly two equal hashes. It therefore shows real duplicate display states on alternating 60 Hz VBlanks, not merely an emulator FPS counter. The fallback is weaker than a GPU command-stream hash, but the exact AABB-style sequence agrees with every dynamically traced race subsystem.
+
+## Function evidence table
+
+| Role | RAM range | File offset | Dynamic caller / cadence | Static inputs and outputs | Confidence |
+|---|---|---:|---|---|---|
+| Race main loop | `0x8001EB04–0x8001ECC3` | `0xF304` | landmarks `+0x84/+0x12C/+0x158`: 300/600 | parity global and mode callback in; GPU submissions/counter out | high |
+| Active race overlay | base `0x801146F0`, entry `0x80114780` | overlay `0x90` | indirect `jalr v0` at `0x8001EC30`: 300/600 | race globals/player table in; update/render/HUD calls out | high |
+| Vehicle/AI dispatcher | `0x80038338–0x800389B3` | `0x28B38` | overlay RA `0x80114D70`: 300/600 | pointer table `0x800FFA00`, active count in; all car state out | high |
+| Vehicle phase A | `0x80029908–0x8002A07F` | `0x1A108` | RA `0x800383D8`: 60/120 | car object/index in; position/physics state out | medium-high |
+| Vehicle phase B | `0x80022EC8–0x80022FF3` | `0x136C8` | RA `0x800383E4`: 60/120 | car object/index in; secondary vehicle state out | medium-high |
+| Camera transform | `0x80034178–0x800344CF` | `0x24978` | overlay RA `0x80114DB0`: 300/600 | object `+0x10..18`, `+0x50..58` in; scratch transform state out | high |
+| Lap/timer logic | `0x8003C838–0x8003CF2B` | `0x2D038` | overlay RA `0x80114C4C`: 60/120 | lap `+0x2AA`, progress `+0x184/+0x188` in; lap counters/results out | high |
+| Frame post-process | `0x8004AA7C–0x8004BA3F` | `0x3B27C` | main RA `0x8001ECB0`: 300/600 | global frame/race state in; per-frame state out | medium-high |
+| VSync service | `0x8008AEF0–0x8008B067` | `0x7B6F0` | statically called by main loop polling | VBlank mode in; counter/timing result out | medium-high |
+| GPU submit A/B/C | `0x8009331C–0x80093813`, `0x80093150–0x8009320F`, `0x800930E0–0x8009314F` | `0x83B1C`, `0x83950`, `0x838E0` | main RAs `0x8001EC70/7C/88/A8`; 30 Hz frames | display-list/environment pointers in; GPU work out | high cadence, medium semantics |
+
+Representative pseudocode, simplified from Ghidra and checked against dynamic calls:
+
+```text
+loop forever:
+    choose frame/buffer parity
+    invoke active mode callback (race overlay)
+    poll VSync and obtain timing
+    submit GPU environment/list work (A, B, C, C)
+    run frame post-processing
+    increment frame state
+
+race overlay frame:
+    update race/lap state
+    dispatch every active vehicle through physics/AI phases
+    update player camera transform
+    build HUD/render state
+```
 
 ## Verified state structure
 
@@ -54,8 +90,10 @@ The static and dynamic evidence supports this sequence:
 
 The base loop polls VSync and switches parity/buffer state, but the active race overlay, physics/AI dispatcher, camera, timer logic, and displayed pixels all advance at 30 Hz. There is not yet evidence for an independent 60 Hz render path with 30 Hz physics.
 
+Classification: **E — integrated 30 Hz loop**. This is stronger than category B because GPU submission and displayed-image changes have now been correlated to the same 30 Hz iteration; it is not category C because no separable render-only invocation has been observed.
+
 ## Consequence for experiments
 
 A safe 60 fps candidate cannot be inferred by simply removing a wait or doubling the whole loop: the measured loop contains physics, AI, camera, timer, HUD, and rendering together. Such a change has a high risk of doubling game speed and invalidating lap timing. The next patch candidate must first isolate a render-only call path or introduce interpolation with explicit evidence. Until then, patch generation remains gated off.
 
-Known limits: GPU command count/hash and display-buffer identity are unavailable through a confirmed Lua API; RPM has not been mapped; AI vehicle trajectories, replay compatibility, other courses/views, and overclock requirements remain unverified.
+Known limits: GPU command content hash and display/draw-buffer identity are unavailable through a confirmed Lua API; the input-read function, render-skip/parity branch semantics, replay path, and RPM field have not been mapped; AI vehicle trajectories, other courses/views, replay compatibility, audio cadence, and overclock requirements remain unverified. These are recorded as unresolved rather than inferred.

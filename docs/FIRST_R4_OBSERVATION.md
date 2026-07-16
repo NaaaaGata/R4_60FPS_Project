@@ -48,3 +48,7 @@ Extraction was read-only from the owned MODE2/2352 BIN/CUE into ignored `private
 - Ghidra Headless is not installed, so captured PCs cannot yet be mapped to functions/xrefs reproducibly.
 
 Resume only after a race state and input are prepared privately. The next run should capture `0x800AC064` and vehicle-coordinate Write PCs first, then bounded Read PCs, and correlate them with VBlank. It must still remain observation-only.
+
+## Subsequent resolution
+
+This section preserves the original boot-time interpretation and blockers as historical evidence. They are now resolved: a deterministic race state and input exist, official Ghidra 12.1.2 is connected, the public vehicle candidates were disproven during a moving race, and `0x801FFF58` was statically identified as stack reuse rather than a camera global. Current conclusions are in `docs/RACE_TRACE.md`, `docs/R4_TIMING_MODEL.md`, and `docs/FINAL_AUDIT.md`.

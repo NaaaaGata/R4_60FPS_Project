@@ -8,7 +8,7 @@
 - Initial PC: `0x8007D4B4`
 - Observed disc-image SHA-256: `72e54ea4bf6da5a2e839a355e9dcacae989fcddcab84b85cbbb4b2ff08f4a716` (622,452,096-byte user-provided `.bin`; this is **not** the executable hash)
 - Observed CUE SHA-256: `139eedfa188f0612f30bca2c0e9fb6d2fdbfd2502a9dc71fceafd73da3011e95` (80-byte user-provided `.cue`)
-- PCSX-Redux version/API: **not installed or not detected at MVP audit**
+- PCSX-Redux version/API: changeset `4ad775e47d47cc9023aa45a2f439289c5897801a`, real bridge verified (the initial MVP audit had not detected it)
 - Ghidra headless: **12.1.2 real smoke confirmed with JDK 21**
 
 ## Starting address hypotheses

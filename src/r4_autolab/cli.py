@@ -41,8 +41,8 @@ from .ghidra.runner import (
     cache_key,
     discover_analyze_headless,
 )
-from .campaign import CampaignBudget, CampaignRunner
-from .codex_client import FakeCodexClient
+from .campaign import CampaignBudget, CampaignRunner, ProposalCampaignRunner
+from .codex_client import CodexExecClient, FakeCodexClient, discover_codex, verify_codex_executable
 from .state_capture import discover_r4_assets, run_manual_capture
 from .input_replay import load_input_scenarios, run_real_input_replays
 from .race_trace import trace_r4_race
@@ -602,23 +602,71 @@ def command_campaign(args: argparse.Namespace) -> int:
     mode = "execute" if args.execute else "dry-run"
     print(json.dumps({"mode": mode, "validated_budget": budget}, indent=2, sort_keys=True))
     if args.execute:
-        if not args.fake_codex:
-            raise RuntimeError("campaign execution requires --fake-codex; real Codex remains explicitly disabled")
+        if bool(args.fake_codex) == bool(args.real_codex):
+            raise RuntimeError("campaign execution requires exactly one of --fake-codex or --real-codex")
         project = _load_config(args)
         stamp = _timestamp_id("campaign")
-        baseline = ExperimentProposal(stamp + "-baseline", "campaign fake baseline", _target(project))
-        candidate_value = json.loads((project.root / "config/fake_candidate.example.json").read_text(encoding="utf-8"))
-        candidate_value["id"] = stamp + "-candidate"
-        candidate = ExperimentProposal.from_dict(candidate_value)
-        with ExperimentStore(project.database) as store:
-            report = CampaignRunner(
-                store,
-                _supervisor(project, store),
-                FakeCodexClient([candidate]),
-                CampaignBudget.from_dict(budget),
-                project.runs_dir / "campaigns" / stamp,
-            ).run(baseline, args.scenario or project.scenario, args.vblanks or project.vblanks)
+        campaign_budget = CampaignBudget.from_dict(budget)
+        output_directory = project.runs_dir / "campaigns" / stamp
+        if args.fake_codex:
+            baseline = ExperimentProposal(stamp + "-baseline", "campaign fake baseline", _target(project))
+            candidate_value = json.loads(
+                (project.root / "config/fake_candidate.example.json").read_text(encoding="utf-8")
+            )
+            candidate_value["id"] = stamp + "-candidate"
+            candidate = ExperimentProposal.from_dict(candidate_value)
+            with ExperimentStore(project.database) as store:
+                report = CampaignRunner(
+                    store,
+                    _supervisor(project, store),
+                    FakeCodexClient([candidate]),
+                    campaign_budget,
+                    output_directory,
+                ).run(baseline, args.scenario or project.scenario, args.vblanks or project.vblanks)
+        else:
+            if project.mode != "real":
+                raise RuntimeError("real Codex campaign requires project.mode=real")
+            codex = discover_codex()
+            if codex is None:
+                raise RuntimeError("a current Codex CLI executable was not found")
+            codex_identity = verify_codex_executable(codex)
+            with ExperimentStore(project.database) as store:
+                report = ProposalCampaignRunner(
+                    store,
+                    CodexExecClient(
+                        codex,
+                        project.root / "schemas" / "experiment_proposal.schema.json",
+                        output_directory / "codex",
+                        enabled=True,
+                        timeout_seconds=min(float(campaign_budget.max_seconds), 300.0),
+                    ),
+                    campaign_budget,
+                    output_directory,
+                    _target(project),
+                    (
+                        "target serial is SLPS-01800",
+                        "target executable SHA-256 is 95a9dc1e81039d5a404091bf75bb1fb67c32f693faa04b629fb48073b2641775",
+                        "the captured race state is reproducible",
+                        "raw displayed image changes at 29.97 Hz in exact two-VBlank runs",
+                        "vehicle/AI dispatcher, camera, lap timer, and race overlay all execute at 30 Hz",
+                        "the active race path is an integrated 30 Hz loop",
+                        "no isolated render-only instruction or reviewed patch candidate exists",
+                        "published candidate addresses were disproven for this build",
+                    ),
+                    allowed_change_fingerprints=frozenset(),
+                ).run()
+            report["codex_identity"] = codex_identity
+            (output_directory / "campaign.json").write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            with ExperimentStore(project.database) as store:
+                store.save_campaign(
+                    stamp,
+                    "FAILED" if report.get("stop_reason") == "codex_client_error" else "COMPLETED",
+                    report,
+                )
         print(json.dumps(report, indent=2, sort_keys=True))
+        return 2 if report.get("stop_reason") == "codex_client_error" else 0
     return 0
 
 
@@ -833,6 +881,7 @@ def build_parser() -> argparse.ArgumentParser:
     campaign.add_argument("--config", dest="campaign_config", required=True)
     campaign.add_argument("--execute", action="store_true")
     campaign.add_argument("--fake-codex", action="store_true")
+    campaign.add_argument("--real-codex", action="store_true")
     campaign.add_argument("--scenario")
     campaign.add_argument("--vblanks", type=int)
     campaign.set_defaults(func=command_campaign)
