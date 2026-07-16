@@ -30,6 +30,14 @@ from .models import ExperimentProposal, TargetVersion
 from .reporting.markdown import render_run_report
 from .storage import ExperimentStore
 from .supervisor import ExperimentSupervisor
+from .ghidra.exports import load_static_export
+from .ghidra.runner import (
+    FakeGhidraRunner,
+    GhidraHeadlessRunner,
+    GhidraRunConfig,
+    cache_key,
+    discover_analyze_headless,
+)
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -326,6 +334,40 @@ def command_stop(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_ghidra_export(args: argparse.Namespace) -> int:
+    input_file = Path(args.input).resolve()
+    if not input_file.is_file():
+        raise FileNotFoundError(input_file)
+    addresses = tuple(int(value, 0) for value in args.address)
+    script_directory = (Path(__file__).resolve().parents[2] / "ghidra_scripts").resolve()
+    script_file = script_directory / "R4Export.java"
+    key = cache_key(input_file, script_file, addresses, args.processor)
+    output = Path(args.output).resolve() if args.output else Path("runs/static-cache") / key / "export.json"
+    output = output.resolve()
+    if output.is_file() and not args.force:
+        summary = load_static_export(output)
+        print(json.dumps({"cached": True, "path": str(output), "summary": summary.__dict__}, indent=2, default=list))
+        return 0
+    executable = discover_analyze_headless()
+    if not args.fake and executable is None:
+        raise RuntimeError("Ghidra analyzeHeadless is not installed; rerun with --fake only for integration testing")
+    config = GhidraRunConfig(
+        analyze_headless=executable or Path("analyzeHeadless"),
+        input_file=input_file,
+        output_file=output,
+        project_directory=output.parent / "project",
+        script_directory=script_directory,
+        addresses=addresses,
+        processor=args.processor,
+        timeout_seconds=float(args.timeout),
+    )
+    runner = FakeGhidraRunner() if args.fake else GhidraHeadlessRunner()
+    runner.run(config, output.parent / "ghidra.log")
+    summary = load_static_export(output)
+    print(json.dumps({"cached": False, "path": str(output), "summary": summary.__dict__}, indent=2, default=list))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="r4-autolab")
     parser.add_argument("--config", default="config/project.toml")
@@ -380,6 +422,16 @@ def build_parser() -> argparse.ArgumentParser:
     capabilities.add_argument("--include-save-state-roundtrip", action="store_true")
     capabilities.add_argument("--include-breakpoint-smoke", action="store_true")
     capabilities.set_defaults(func=command_pcsx_capabilities)
+
+    ghidra_export = subparsers.add_parser("ghidra-export")
+    ghidra_export.add_argument("--input", required=True)
+    ghidra_export.add_argument("--address", action="append", default=[])
+    ghidra_export.add_argument("--processor")
+    ghidra_export.add_argument("--output")
+    ghidra_export.add_argument("--timeout", type=float, default=600.0)
+    ghidra_export.add_argument("--force", action="store_true")
+    ghidra_export.add_argument("--fake", action="store_true")
+    ghidra_export.set_defaults(func=command_ghidra_export)
 
     stop = subparsers.add_parser("stop")
     stop.set_defaults(func=command_stop)

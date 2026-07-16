@@ -11,7 +11,7 @@
 | Phase 2: Reproducible supervisor | COMPLETE (MVP scope) | State transitions, artifacts, restore paths, comparisons |
 | Phase 3A: PCSX-Redux minimum capabilities | COMPLETE | Real arm64 bridge capability report; read-only checks passed |
 | Phase 3B: PCSX-Redux remaining bridge | COMPLETE | Extended real smoke: breakpoint lifecycle and raw-state roundtrip passed |
-| Phase 4: Static analysis bridge | PENDING | Ghidra is not installed; fake adapter will remain asset-free |
+| Phase 4: Static analysis bridge | COMPLETE WITH REAL-SMOKE BLOCKER | Headless runner/cache/export script/fake tests complete; Ghidra absent |
 | Phase 5: Automated evaluation | PENDING | Basic evaluator exists; full timing/physics/render/visual profiles remain |
 | Phase 6: Codex research loop | PENDING | Campaign is dry-run validation only |
 | Phase 7: First R4 investigation | PENDING | Owned disc exists; deterministic race state/input not yet configured |
@@ -65,3 +65,26 @@ Date: 2026-07-17 JST
 
 - `pytest`: 33 passed.
 - `mypy src`: success for 18 source files.
+
+## Section 3 — Phase 4 static analysis bridge
+
+Date: 2026-07-17 JST
+
+### Implemented
+
+- Official `analyzeHeadless` discovery, argument-array builder, timeout, isolated temporary project, logs, and content-addressed cache.
+- `ghidra-export` CLI with real and explicit `--fake` modes; real mode fails closed when Ghidra is absent.
+- Headless `R4Export.java` for functions, basic blocks, calls, requested-address xrefs/disassembly, strings, and overlay blocks.
+- JSON export validation and deterministic fake integration.
+
+### Verification
+
+- Fake export command completed and cache artifacts were written under ignored `runs/static-cache/`.
+- `pytest`: 35 passed.
+- `mypy src`: success for 21 source files.
+
+### External blocker
+
+- `analyzeHeadless` is not installed or configured on this Mac. No Ghidra binary was downloaded.
+- The Java export script therefore remains uncompiled against a concrete Ghidra release.
+- Real continuation requires an official local Ghidra/JDK installation and an extracted, hashed PS-X EXE in an ignored path. Detailed steps are in `docs/STATIC_ANALYSIS.md`.

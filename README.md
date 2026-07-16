@@ -31,6 +31,7 @@ Generated artifacts are under `runs/<run-id>/`; SQLite is `runs/experiments.sqli
 r4-autolab doctor
 r4-autolab pcsx-capabilities
 r4-autolab pcsx-capabilities --include-breakpoint-smoke --include-save-state-roundtrip
+r4-autolab ghidra-export --input /private/path/PSX.EXE --address 0x80010000 --fake
 r4-autolab init-config
 r4-autolab inspect-input /path/to/owned/file
 r4-autolab baseline --scenario fake-straight
