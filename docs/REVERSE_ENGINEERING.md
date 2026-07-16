@@ -9,7 +9,7 @@
 - Observed disc-image SHA-256: `72e54ea4bf6da5a2e839a355e9dcacae989fcddcab84b85cbbb4b2ff08f4a716` (622,452,096-byte user-provided `.bin`; this is **not** the executable hash)
 - Observed CUE SHA-256: `139eedfa188f0612f30bca2c0e9fb6d2fdbfd2502a9dc71fceafd73da3011e95` (80-byte user-provided `.cue`)
 - PCSX-Redux version/API: **not installed or not detected at MVP audit**
-- Ghidra headless: **not detected at MVP audit**
+- Ghidra headless: **12.1.2 real smoke confirmed with JDK 21**
 
 ## Starting address hypotheses
 
@@ -37,3 +37,5 @@ Boot/title Read/Write PCs for the camera candidate are recorded in `docs/FIRST_R
 The validated Japanese race state disproves the published vehicle/frame candidates for this build: `0x800AC064`, `0x800AC0D0/D4/D8`, `0x800AC104`, `0x800AC288`, and `0x800AC32C` remained zero over 600 moving-race VBlanks and produced no bounded accesses in their configured phases.
 
 `0x801FFF58` changed at approximately 30 Hz and produced bounded Read/Write events, but lies immediately below the observed stack pointer and was accessed by many unrelated PCs. It is classified as **dynamic stack-region evidence, camera semantics unconfirmed/rejected**. See `docs/RACE_TRACE.md` for exact sources and limits.
+
+Real Ghidra mapping confirms the frequent pairs are stack traffic: `0x80050194` / `0x800501B0` are `sw` / `lw ra,0x10(sp)` in `FUN_80050168`, while `0x80084C28` / `0x80084D2C` are `sw` / `lw s4,0x20(sp)` in `FUN_80084c10`. This is static corroboration that the watched address was whichever stack slot happened to occupy `0x801FFF58`, not a stable camera global.

@@ -95,9 +95,14 @@ def _load_config(args: argparse.Namespace) -> ProjectConfig:
     return load_project_config(path)
 
 
-def command_doctor(_: argparse.Namespace) -> int:
+def command_doctor(args: argparse.Namespace) -> int:
     python_ok = sys.version_info >= (3, 11)
     pcsx_path = discover_pcsx_redux()
+    configured_ghidra: Path | None = None
+    config_path = Path(args.config)
+    if config_path.is_file():
+        configured_ghidra = load_project_config(config_path).ghidra_headless
+    ghidra_path = discover_analyze_headless(configured_ghidra)
     pcsx_version: str | None = None
     if pcsx_path is not None:
         try:
@@ -110,7 +115,7 @@ def command_doctor(_: argparse.Namespace) -> int:
         ("Git", shutil.which("git"), None, False, True),
         ("Codex CLI", os.environ.get("R4_AUTOLAB_CODEX") or shutil.which("codex"), None, False, True),
         ("PCSX-Redux", str(pcsx_path) if pcsx_path else None, pcsx_version, False, True),
-        ("Ghidra analyzeHeadless", os.environ.get("R4_AUTOLAB_GHIDRA_HEADLESS") or shutil.which("analyzeHeadless"), None, False, True),
+        ("Ghidra analyzeHeadless", str(ghidra_path) if ghidra_path else None, None, False, True),
         ("Java", shutil.which("java"), None, False, True),
     ]
     print(f"R4 AutoLab {__version__}")
@@ -481,20 +486,41 @@ def command_stop(args: argparse.Namespace) -> int:
 
 
 def command_ghidra_export(args: argparse.Namespace) -> int:
+    project = _load_config(args)
     input_file = Path(args.input).resolve()
     if not input_file.is_file():
         raise FileNotFoundError(input_file)
     addresses = tuple(int(value, 0) for value in args.address)
     script_directory = (Path(__file__).resolve().parents[2] / "ghidra_scripts").resolve()
     script_file = script_directory / "R4Export.java"
-    key = cache_key(input_file, script_file, addresses, args.processor)
+    prepare_script = script_directory / "R4Prepare.java"
+    header = input_file.read_bytes()[:0x800]
+    is_psx_exe = len(header) >= 0x20 and header.startswith(b"PS-X EXE")
+    processor = args.processor
+    loader: str | None = None
+    loader_base: int | None = None
+    loader_offset: int | None = None
+    loader_length: int | None = None
+    entry_point: int | None = None
+    global_pointer: int | None = None
+    if is_psx_exe:
+        entry_point = struct.unpack_from("<I", header, 0x10)[0]
+        global_pointer = struct.unpack_from("<I", header, 0x14)[0]
+        loader_base = struct.unpack_from("<I", header, 0x18)[0]
+        loader_length = struct.unpack_from("<I", header, 0x1C)[0]
+        loader_offset = 0x800
+        if loader_length <= 0 or loader_offset + loader_length > input_file.stat().st_size:
+            raise ValueError("PS-X EXE payload range is invalid")
+        processor = processor or "MIPS:LE:32:default"
+        loader = "BinaryLoader"
+    key = cache_key(input_file, script_file, addresses, processor, (prepare_script,))
     output = Path(args.output).resolve() if args.output else Path("runs/static-cache") / key / "export.json"
     output = output.resolve()
     if output.is_file() and not args.force:
         summary = load_static_export(output)
         print(json.dumps({"cached": True, "path": str(output), "summary": summary.__dict__}, indent=2, default=list))
         return 0
-    executable = discover_analyze_headless()
+    executable = discover_analyze_headless(project.ghidra_headless)
     if not args.fake and executable is None:
         raise RuntimeError("Ghidra analyzeHeadless is not installed; rerun with --fake only for integration testing")
     config = GhidraRunConfig(
@@ -504,8 +530,15 @@ def command_ghidra_export(args: argparse.Namespace) -> int:
         project_directory=output.parent / "project",
         script_directory=script_directory,
         addresses=addresses,
-        processor=args.processor,
+        processor=processor,
         timeout_seconds=float(args.timeout),
+        loader=loader,
+        loader_base_address=loader_base,
+        loader_file_offset=loader_offset,
+        loader_length=loader_length,
+        loader_block_name="R4_PAYLOAD" if is_psx_exe else None,
+        entry_point=entry_point,
+        global_pointer=global_pointer,
     )
     runner = FakeGhidraRunner() if args.fake else GhidraHeadlessRunner()
     runner.run(config, output.parent / "ghidra.log")

@@ -26,3 +26,8 @@ request_timeout_seconds = 5.0
 vblanks = 120
 scenario = "fake-straight"
 # A verified manual capture changes the ignored local scenario to race-straight.
+
+[tools]
+# Local official Ghidra support/analyzeHeadless path; keep private paths in the
+# ignored config/project.toml only.
+ghidra_headless = ""

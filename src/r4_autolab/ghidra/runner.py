@@ -20,6 +20,13 @@ class GhidraRunConfig:
     addresses: tuple[int, ...] = ()
     processor: str | None = None
     timeout_seconds: float = 600.0
+    loader: str | None = None
+    loader_base_address: int | None = None
+    loader_file_offset: int | None = None
+    loader_length: int | None = None
+    loader_block_name: str | None = None
+    entry_point: int | None = None
+    global_pointer: int | None = None
 
 
 def discover_analyze_headless(configured: Path | None = None) -> Path | None:
@@ -54,10 +61,36 @@ def build_headless_args(config: GhidraRunConfig) -> list[str]:
     ]
     if config.processor:
         arguments.extend(["-processor", config.processor])
+    if config.loader:
+        arguments.extend(["-loader", config.loader])
+    if config.loader_base_address is not None:
+        arguments.extend(["-loader-baseAddr", f"0x{config.loader_base_address:08X}"])
+    if config.loader_file_offset is not None:
+        arguments.extend(["-loader-fileOffset", f"0x{config.loader_file_offset:X}"])
+    if config.loader_length is not None:
+        # BinaryLoader's option parser expects an address-style hexadecimal value.
+        arguments.extend(["-loader-length", f"0x{config.loader_length:X}"])
+    if config.loader_block_name:
+        arguments.extend(["-loader-blockName", config.loader_block_name])
     arguments.extend(
         [
             "-scriptPath",
             str(config.script_directory),
+        ]
+    )
+    if config.entry_point is not None:
+        arguments.extend(
+            [
+                "-preScript",
+                "R4Prepare.java",
+                f"0x{config.entry_point:08X}",
+                f"0x{(config.global_pointer or 0):08X}",
+                f"0x{(config.loader_base_address or 0):08X}",
+                str(config.loader_length or 0),
+            ]
+        )
+    arguments.extend(
+        [
             "-postScript",
             "R4Export.java",
             str(config.output_file),
@@ -76,10 +109,18 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def cache_key(input_file: Path, script_file: Path, addresses: tuple[int, ...], processor: str | None) -> str:
+def cache_key(
+    input_file: Path,
+    script_file: Path,
+    addresses: tuple[int, ...],
+    processor: str | None,
+    additional_script_files: tuple[Path, ...] = (),
+) -> str:
     digest = hashlib.sha256()
     digest.update(_sha256(input_file).encode("ascii"))
     digest.update(_sha256(script_file).encode("ascii"))
+    for additional in additional_script_files:
+        digest.update(_sha256(additional).encode("ascii"))
     digest.update(json.dumps({"addresses": addresses, "processor": processor}, sort_keys=True).encode("utf-8"))
     return digest.hexdigest()
 

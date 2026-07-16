@@ -63,5 +63,5 @@ The manual capture command auto-detects a verified private R4 Japanese CUE, star
 
 - Phase 3A is verified against the local arm64 PCSX-Redux build documented in `docs/PCSX_REDUX_COMPATIBILITY.md`; other builds may differ.
 - Real Codex execution remains disabled until a separately audited, non-zero budgeted configuration is introduced.
-- Ghidra real smoke and GPU/VRAM hashing remain pending; deterministic controller replay is connected through the official Lua Pad API.
+- Official Ghidra 12.1.2 real headless export and deterministic controller replay are connected; GPU/VRAM command hashing remains pending.
 - The R4 Japanese disc identity is confirmed, but known runtime addresses still require race-state evidence.

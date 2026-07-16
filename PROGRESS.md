@@ -11,13 +11,14 @@
 | Phase 2: Reproducible supervisor | COMPLETE (MVP scope) | State transitions, artifacts, restore paths, comparisons |
 | Phase 3A: PCSX-Redux minimum capabilities | COMPLETE | Real arm64 bridge capability report; read-only checks passed |
 | Phase 3B: PCSX-Redux remaining bridge | COMPLETE | Extended real smoke: breakpoint lifecycle and raw-state roundtrip passed |
-| Phase 4: Static analysis bridge | COMPLETE WITH REAL-SMOKE BLOCKER | Headless runner/cache/export script/fake tests complete; Ghidra absent |
+| Phase 4: Static analysis bridge | COMPLETE WITH REAL SMOKE | Official Ghidra 12.1.2, verified PS-X payload mapping, selected dynamic-PC export |
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
 | Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
 | Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
 | Race-state capture | COMPLETE | One-Enter raw capture and three-process deterministic reload PASS |
 | Deterministic input | COMPLETE | Official Lua Pad override; five scenarios × three attempts PASS |
 | Deterministic race trace | COMPLETE FOR PUBLISHED CANDIDATES | 600 VBlanks; bounded ordered Read/Write phases; public vehicle addresses disproven |
+| Real static correlation | COMPLETE FOR CAPTURED PCS | Stack prologue/epilogue mapping rejects false camera global |
 
 Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
 
@@ -279,3 +280,27 @@ Date: 2026-07-17 JST
 - `0x801FFF58` lies 0x38 bytes below captured SP and has many unrelated source PCs; its public camera label is rejected pending stronger mapping.
 - PASS: all phases completed, cleanup succeeded, 600 telemetry and 64 bounded breakpoint events retained locally.
 - No candidate address write, RAM patch, large dump, or unbounded exploration occurred.
+
+## Section 12 — Official Ghidra installation and real export
+
+Date: 2026-07-17 JST
+
+### Environment
+
+- Official Ghidra 12.1.2 asset from NSA GitHub Releases, installed without administrator privileges under ignored `private/tools/ghidra/`.
+- ZIP SHA-256 matched official digest `b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d`.
+- OpenJDK 21.0.11; doctor now detects the locally configured `analyzeHeadless`.
+
+### Verified import and export
+
+- Raw BinaryLoader mapped exactly the 638,976-byte payload from file offset `0x800` to `0x80010000–0x800ABFFF` as MIPS little-endian.
+- Verified entry point `0x8007D4B4` was established before analysis.
+- Real export: 1,456 functions, 16,979 basic blocks, 3,034 call edges, 251 strings, and three selected decompilations.
+- Export includes function ranges/file offsets, xrefs, surrounding MIPS with delay slots, computed jumps, memory blocks, and pseudocode.
+
+### Dynamic/static conclusion
+
+- `0x80050194` / `0x800501B0`: save/restore `ra` at `0x10(sp)` in `FUN_80050168`.
+- `0x80084C28` / `0x80084D2C`: save/restore `s4` at `0x20(sp)` in `FUN_80084c10`.
+- These instructions explain the apparent `0x801FFF58` camera events as stack reuse. The public camera hypothesis is rejected for this build.
+- Ghidra's function signatures and pseudocode remain hypotheses and are not treated as ground truth.
