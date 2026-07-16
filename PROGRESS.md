@@ -12,7 +12,7 @@
 | Phase 3A: PCSX-Redux minimum capabilities | COMPLETE | Real arm64 bridge capability report; read-only checks passed |
 | Phase 3B: PCSX-Redux remaining bridge | COMPLETE | Extended real smoke: breakpoint lifecycle and raw-state roundtrip passed |
 | Phase 4: Static analysis bridge | COMPLETE WITH REAL-SMOKE BLOCKER | Headless runner/cache/export script/fake tests complete; Ghidra absent |
-| Phase 5: Automated evaluation | PENDING | Basic evaluator exists; full timing/physics/render/visual profiles remain |
+| Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
 | Phase 6: Codex research loop | PENDING | Campaign is dry-run validation only |
 | Phase 7: First R4 investigation | PENDING | Owned disc exists; deterministic race state/input not yet configured |
 
@@ -88,3 +88,27 @@ Date: 2026-07-17 JST
 - `analyzeHeadless` is not installed or configured on this Mac. No Ghidra binary was downloaded.
 - The Java export script therefore remains uncompiled against a concrete Ghidra release.
 - Real continuation requires an official local Ghidra/JDK installation and an extracted, hashed PS-X EXE in an ignored path. Detailed steps are in `docs/STATIC_ANALYSIS.md`.
+
+## Section 4 — Phase 5 automated evaluation
+
+Date: 2026-07-17 JST
+
+### Implemented
+
+- Generic field cadence analysis with update frequency and duplicate ratio.
+- VBlank-aligned maximum trajectory divergence for position, speed, and RPM.
+- TOML threshold evaluation for timer ratio, physics, rendering uniqueness, duplicates, and stability.
+- Deterministic 16/24-bpp raw screenshot checks for dimensions, byte integrity, black/extreme ratios, and SHA-256.
+- `compare` now emits evidence checks; `visual-check` provides a standalone oracle.
+
+### Verification
+
+- Fake baseline measured ~30.25 GPU-state changes/s; render-only candidate measured 60.0/s.
+- Candidate evaluation passed with timer ratio 1.0 and zero configured physics divergence.
+- Real capability screenshot passed 640×478×16-bpp byte-size validation.
+- `pytest`: 38 passed.
+- `mypy src`: success for 24 source files.
+
+### Remaining evidence dependencies
+
+- AI, lap, gear, steering, collision, drift, and replay checks are implemented only when those fields are supplied by a future real trace configuration; no success claim is made without them.

@@ -25,7 +25,8 @@ from .emulator.pcsx_redux import (
     query_pcsx_redux_version,
 )
 from .emulator.transport import TcpJsonlTransport
-from .evaluator import compare_summaries, load_jsonl, summary_from_record, summarize_events
+from .evaluator import compare_summaries, evaluate_trace_pair, load_jsonl, summary_from_record, summarize_events
+from .analysis.visual import analyze_raw_screenshot
 from .models import ExperimentProposal, TargetVersion
 from .reporting.markdown import render_run_report
 from .storage import ExperimentStore
@@ -280,8 +281,17 @@ def command_compare(args: argparse.Namespace) -> int:
             summary_from_record(experiment_record),
         )
         store.save_comparison(args.baseline_id, args.experiment_id, comparison.to_dict())
-    print(json.dumps(comparison.to_dict(), indent=2, sort_keys=True))
+    baseline_trace = load_jsonl(Path(baseline_record["run_dir"]) / "telemetry.jsonl")
+    experiment_trace = load_jsonl(Path(experiment_record["run_dir"]) / "telemetry.jsonl")
+    evaluation = evaluate_trace_pair(baseline_trace, experiment_trace, Path(args.criteria))
+    print(json.dumps({"comparison": comparison.to_dict(), "evaluation": evaluation}, indent=2, sort_keys=True))
     return 0
+
+
+def command_visual_check(args: argparse.Namespace) -> int:
+    stats = analyze_raw_screenshot(Path(args.raw), Path(args.metadata))
+    print(json.dumps(stats.to_dict(), indent=2, sort_keys=True))
+    return 0 if stats.valid_size else 2
 
 
 def command_trace_summary(args: argparse.Namespace) -> int:
@@ -400,6 +410,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare = subparsers.add_parser("compare")
     compare.add_argument("baseline_id")
     compare.add_argument("experiment_id")
+    compare.add_argument("--criteria", default="config/success_criteria.example.toml")
     compare.set_defaults(func=command_compare)
 
     trace = subparsers.add_parser("trace-summary")
@@ -432,6 +443,11 @@ def build_parser() -> argparse.ArgumentParser:
     ghidra_export.add_argument("--force", action="store_true")
     ghidra_export.add_argument("--fake", action="store_true")
     ghidra_export.set_defaults(func=command_ghidra_export)
+
+    visual = subparsers.add_parser("visual-check")
+    visual.add_argument("--raw", required=True)
+    visual.add_argument("--metadata", required=True)
+    visual.set_defaults(func=command_visual_check)
 
     stop = subparsers.add_parser("stop")
     stop.set_defaults(func=command_stop)

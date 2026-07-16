@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tomllib
 from typing import Any, Iterable
 
 from .models import Comparison, RunSummary
+from .analysis.cadence import analyze_cadence
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -73,3 +75,58 @@ def summary_from_record(record: dict[str, Any]) -> RunSummary:
         raise ValueError(f"run {record.get('id')} has no summary")
     return RunSummary(**value)
 
+
+def trajectory_divergence(
+    baseline_events: list[dict[str, Any]],
+    candidate_events: list[dict[str, Any]],
+    fields: tuple[str, ...] = ("position", "speed", "rpm"),
+) -> dict[str, float]:
+    baseline_by_vblank = {int(event["vblank_index"]): event for event in baseline_events}
+    candidate_by_vblank = {int(event["vblank_index"]): event for event in candidate_events}
+    common = sorted(baseline_by_vblank.keys() & candidate_by_vblank.keys())
+    if not common:
+        raise ValueError("traces have no common VBlank indexes")
+    result: dict[str, float] = {}
+    for field in fields:
+        result[field] = max(
+            abs(
+                float(dict(baseline_by_vblank[index].get("watch_values", {})).get(field, 0.0))
+                - float(dict(candidate_by_vblank[index].get("watch_values", {})).get(field, 0.0))
+            )
+            for index in common
+        )
+    return result
+
+
+def evaluate_trace_pair(
+    baseline_events: list[dict[str, Any]],
+    candidate_events: list[dict[str, Any]],
+    criteria_path: Path,
+) -> dict[str, Any]:
+    with criteria_path.open("rb") as handle:
+        criteria = tomllib.load(handle)
+    baseline = summarize_events(baseline_events)
+    candidate = summarize_events(candidate_events)
+    comparison = compare_summaries("baseline", "candidate", baseline, candidate)
+    divergence = trajectory_divergence(baseline_events, candidate_events)
+    timing = criteria["timing"]
+    physics = criteria["physics"]
+    rendering = criteria["rendering"]
+    candidate_cadence = analyze_cadence(candidate_events, "gpu_hash")
+    checks = {
+        "game_speed_ratio": float(timing["game_speed_ratio_min"]) <= comparison.game_speed_ratio <= float(timing["game_speed_ratio_max"]),
+        "position_divergence": divergence["position"] <= float(physics["max_position_delta"]),
+        "speed_divergence": divergence["speed"] <= float(physics["max_speed_delta"]),
+        "rpm_divergence": divergence["rpm"] <= float(physics["max_rpm_delta"]),
+        "duplicate_ratio": candidate.duplicate_frame_ratio <= float(rendering["maximum_duplicate_ratio"]),
+        "unique_states_per_second": candidate_cadence.update_hz >= float(rendering["minimum_unique_states_per_second"]),
+        "stability": comparison.stable,
+    }
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "comparison": comparison.to_dict(),
+        "trajectory_max_delta": divergence,
+        "baseline_cadence": analyze_cadence(baseline_events, "gpu_hash").to_dict(),
+        "candidate_cadence": candidate_cadence.to_dict(),
+    }
