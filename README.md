@@ -1,6 +1,7 @@
 # R4 AutoLab
 
 Current phase-by-phase implementation status is tracked in [PROGRESS.md](PROGRESS.md).
+The current-environment acceptance matrix and external blockers are in [docs/FINAL_AUDIT.md](docs/FINAL_AUDIT.md).
 
 R4 AutoLab is a reproducible, safety-first experiment supervisor for researching the PlayStation game *R4 -RIDGE RACER TYPE 4-*. Its purpose is to measure the relationship between VBlank, rendering, physics, AI, timers, and buffers before any 60 fps patch is attempted.
 

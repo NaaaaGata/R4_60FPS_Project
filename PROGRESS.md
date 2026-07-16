@@ -16,6 +16,8 @@
 | Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
 | Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
 
+Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
+
 ## Section 1 — Baseline audit (Phase 0 through Phase 3A)
 
 Date: 2026-07-17 JST
@@ -166,3 +168,15 @@ Date: 2026-07-17 JST
 - `pytest`: 42 passed.
 - `mypy src`: success for 28 source files.
 - Race-level continuation is blocked by the absence of a deterministic private race `.rawstate`, input script, and installed Ghidra. Boot results are not promoted to race conclusions.
+
+## Section 7 — Final acceptance audit
+
+Date: 2026-07-17 JST
+
+- Full asset-free suite: 42 passed.
+- Strict type checking: 28 source files, no issues.
+- Real extended PCSX capability: PASS except intentionally unrequested scratch write.
+- Fake static export and Fake Codex campaign: PASS.
+- First owned-disc identity and bounded boot Read/Write observation: complete.
+- Final requirement matrix and exact resume conditions: `docs/FINAL_AUDIT.md`.
+- No 60 fps patch or success claim was produced.
