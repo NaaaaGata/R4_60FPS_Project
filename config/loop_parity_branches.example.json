@@ -1,0 +1,37 @@
+{
+  "protocol_version": 1,
+  "executable_sha256": "95a9dc1e81039d5a404091bf75bb1fb67c32f693faa04b629fb48073b2641775",
+  "source": {
+    "kind": "ghidra-headless",
+    "export": "runs/static-cache/0a9014d55f88402b48e8e17ec5c1d389d8dfb58a8cc2f5965b2fc43f90bf8513/export.json",
+    "function": "0x8001EB04"
+  },
+  "branches": [
+    {
+      "function": "FUN_8001eb04",
+      "function_entry": "0x8001EB04",
+      "address": "0x8001EC54",
+      "file_offset": "0xF454",
+      "text": "bne v0,zero,0x8001ec48",
+      "target": "0x8001EC48",
+      "fall_through": "0x8001EC5C",
+      "previous_address": "0x8001EC50",
+      "previous_text": "slt v0,v0,s0",
+      "delay_slot_address": "0x8001EC58",
+      "delay_slot_text": "nop"
+    },
+    {
+      "function": "FUN_8001eb04",
+      "function_entry": "0x8001EB04",
+      "address": "0x8001EC94",
+      "file_offset": "0xF494",
+      "text": "beq v0,zero,0x8001eca8",
+      "target": "0x8001ECA8",
+      "fall_through": "0x8001EC9C",
+      "previous_address": "0x8001EC90",
+      "previous_text": "nop",
+      "delay_slot_address": "0x8001EC98",
+      "delay_slot_text": "nop"
+    }
+  ]
+}

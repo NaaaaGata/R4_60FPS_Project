@@ -92,8 +92,14 @@ The base loop polls VSync and switches parity/buffer state, but the active race 
 
 Classification: **E — integrated 30 Hz loop**. This is stronger than category B because GPU submission and displayed-image changes have now been correlated to the same 30 Hz iteration; it is not category C because no separable render-only invocation has been observed.
 
+## Exact wait branch and parity
+
+The previous cadence conclusion is now backed by branch-level evidence. `0x8001EC48` calls `FUN_8008AEF0` with `a0=1`; `0x8001EC50` compares its return with the state-specific threshold `s0=384`; and `bne` at `0x8001EC54` returns to the poll while the comparison is true. Its `0x8001EC58` delay slot is `nop`. The not-taken path reaches `0x8001EC5C`, which calls the same service with `a0=0` in its delay slot. The bounded trace observed 2,397 taken and three not-taken outcomes before its 2,400-event branch cap.
+
+Over a separate 600-VBlank run, active and duplicate intervals alternated exactly 300/300. Every fixed race watch and screenshot hash stayed unchanged on duplicate intervals. Active frames alternated parity 0/1 and command bases `0x800AD8D0` / `0x800D0048`, separated by `0x22778`. Full branch metadata, delay-slot handling, and bounds are in `docs/R4_LOOP_PARITY.md`.
+
 ## Consequence for experiments
 
 A safe 60 fps candidate cannot be inferred by simply removing a wait or doubling the whole loop: the measured loop contains physics, AI, camera, timer, HUD, and rendering together. Such a change has a high risk of doubling game speed and invalidating lap timing. The next patch candidate must first isolate a render-only call path or introduce interpolation with explicit evidence. Until then, patch generation remains gated off.
 
-Known limits: GPU command content hash and display/draw-buffer identity are unavailable through a confirmed Lua API; the input-read function, render-skip/parity branch semantics, replay path, and RPM field have not been mapped; AI vehicle trajectories, other courses/views, replay compatibility, audio cadence, and overclock requirements remain unverified. These are recorded as unresolved rather than inferred.
+Known limits: GPU command content hash and display/draw-buffer identity remain unverified; the exact wait/parity branch is now mapped, but the input-read function, replay path, and RPM field have not been mapped; AI vehicle trajectories, other courses/views, replay compatibility, audio cadence, and overclock requirements remain unverified. These are recorded as unresolved rather than inferred.

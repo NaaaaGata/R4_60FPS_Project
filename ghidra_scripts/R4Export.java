@@ -52,6 +52,15 @@ public class R4Export extends GhidraScript {
         return String.format("0x%X", sourceFileOffset + address.subtract(payload.getStart()));
     }
 
+    private static String objects(Object[] values) {
+        StringBuilder result = new StringBuilder("[");
+        for (int index = 0; index < values.length; index++) {
+            if (index > 0) result.append(',');
+            result.append(quote(String.valueOf(values[index])));
+        }
+        return result.append(']').toString();
+    }
+
     private String inputHash() throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         String executable = currentProgram.getExecutablePath();
@@ -201,9 +210,42 @@ public class R4Export extends GhidraScript {
                 }
             }
             out.println("\n  ],");
-            out.println("  \"indirect_jumps\": [");
+            out.println("  \"branches\": [");
             first = true;
             Set<String> requestedFunctions = new HashSet<>();
+            for (String value : requested) {
+                Function function = currentProgram.getFunctionManager().getFunctionContaining(toAddr(value));
+                if (function == null || !requestedFunctions.add(hex(function.getEntryPoint()))) continue;
+                InstructionIterator instructions = currentProgram.getListing().getInstructions(function.getBody(), true);
+                while (instructions.hasNext()) {
+                    Instruction item = instructions.next();
+                    if (!item.getFlowType().isConditional()) continue;
+                    Address[] flows = item.getFlows();
+                    Address fallThrough = item.getFallThrough();
+                    Instruction previous = getInstructionBefore(item.getAddress());
+                    Instruction delay = item.getDelaySlotDepth() > 0
+                        ? getInstructionAfter(item.getAddress()) : null;
+                    if (!first) out.println(",");
+                    first = false;
+                    out.print("    {\"function\":" + quote(function.getName()) +
+                        ",\"function_entry\":" + quote(hex(function.getEntryPoint())) +
+                        ",\"address\":" + quote(hex(item.getAddress())) +
+                        ",\"file_offset\":" + quote(fileOffset(item.getAddress(), payload, sourceFileOffset)) +
+                        ",\"text\":" + quote(item.toString()) +
+                        ",\"inputs\":" + objects(item.getInputObjects()) +
+                        ",\"outputs\":" + objects(item.getResultObjects()) +
+                        ",\"target\":" + (flows.length > 0 ? quote(hex(flows[0])) : "null") +
+                        ",\"fall_through\":" + (fallThrough != null ? quote(hex(fallThrough)) : "null") +
+                        ",\"previous_address\":" + (previous != null ? quote(hex(previous.getAddress())) : "null") +
+                        ",\"previous_text\":" + (previous != null ? quote(previous.toString()) : "null") +
+                        ",\"delay_slot_address\":" + (delay != null ? quote(hex(delay.getAddress())) : "null") +
+                        ",\"delay_slot_text\":" + (delay != null ? quote(delay.toString()) : "null") + "}");
+                }
+            }
+            out.println("\n  ],");
+            out.println("  \"indirect_jumps\": [");
+            first = true;
+            requestedFunctions.clear();
             for (String value : requested) {
                 Function function = currentProgram.getFunctionManager().getFunctionContaining(toAddr(value));
                 if (function == null || !requestedFunctions.add(hex(function.getEntryPoint()))) continue;

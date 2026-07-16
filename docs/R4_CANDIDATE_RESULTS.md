@@ -29,3 +29,9 @@ A single real Codex proposal campaign used a code-signed Codex CLI 0.144.5 with 
 Codex returned `changes=[]` and the hypothesis that no evidence-backed render-only RAM change exists. The Supervisor-side proposal gate classified it `NO_SAFE_CHANGE`; emulator experiments remained zero. Two earlier calls failed on strict Structured Outputs schema compatibility and are retained as FAILED campaign records; neither reached an emulator.
 
 The next safe work is additional observation/static correlation of GPU submission, display/draw buffers, render-skip branches, replay handling, and RPM—not patch execution.
+
+## Render-boundary follow-up gate
+
+The exact main-loop wait branch is now identified at `0x8001EC54`, including its `nop` delay slot and fall-through to the `VSync(0)` call at `0x8001EC5C`. A 600-VBlank read-only trace produced an exact 300 active / 300 duplicate alternation. Frame state, player state, command-base selection, GPU submission, and displayed pixels all remain unchanged on each duplicate interval.
+
+This strengthens the no-patch decision: the observed gate surrounds the integrated update/render iteration, not a proven render-only call. Its removal or inversion is therefore not an evidence-backed candidate. Candidate count and R4 RAM experiment count remain zero.

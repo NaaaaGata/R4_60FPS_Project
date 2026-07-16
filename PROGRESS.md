@@ -378,3 +378,19 @@ Date: 2026-07-17 JST
 - Tracked-file audit found no state, run, private asset, BIN, CUE, extracted executable, or raw capture.
 - `git diff --check`: clean. `.metals/` and `.vscode/` remain unrelated untracked IDE directories and are excluded.
 - Final matrix, exact unresolved items, and reproduction commands are in `docs/FINAL_AUDIT.md`.
+
+## Section 17 — Render-boundary branch and loop parity
+
+Date: 2026-07-17 JST
+
+- Created `feat/render-boundary-analysis` from `feat/race-state-analysis`; private assets and unrelated `.metals/` / `.vscode/` remain untracked and untouched.
+- Revalidated 67 tests, mypy, doctor, extended read-only PCSX capabilities, exact state SHA-256, and all five deterministic inputs before analysis.
+- Extended the bounded Ghidra exporter with conditional-branch target, fall-through, predecessor, and delay-slot metadata.
+- Added a tested MIPS branch decoder and executable-identity-locked branch inventory.
+- Added a second read-only enforcement layer in Python and Lua; `write_memory` is rejected before IPC when enabled.
+- `trace-loop-parity` measured 600 VBlanks with 12 bounded Exec breakpoints and 16 fixed reads: 300 active and 300 duplicate intervals in exact alternation.
+- Main/race/vehicle/camera/timer/post and GPU submissions occur only on active intervals; every fixed watch and screenshot hash is unchanged on duplicates.
+- Exact wait branch: `0x8001EC54 bne v0,zero,0x8001EC48`, `nop` delay slot, fall-through `0x8001EC5C`; state-specific comparison threshold is 384.
+- Frame parity alternates command bases `0x800AD8D0` and `0x800D0048`, stride `0x22778`, once per active frame.
+- The 600-VBlank run retained 6,000 bounded events, wrote zero R4 bytes, shut down normally, and left no PCSX process.
+- Detailed evidence and limits: `docs/R4_LOOP_PARITY.md`.

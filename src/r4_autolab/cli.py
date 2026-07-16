@@ -51,6 +51,7 @@ from .overlay_probe import probe_runtime_overlay
 from .targeted_trace import parse_target_watch, trace_targeted_addresses
 from .render_cadence import measure_render_cadence
 from .scratch_audit import audit_scratch_location
+from .loop_parity import load_branch_inventory, trace_loop_parity
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -500,6 +501,42 @@ def command_audit_scratch(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "PASS" else 2
 
 
+def command_trace_loop_parity(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for loop parity tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for loop parity tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    if args.scenario not in definitions:
+        raise ValueError(f"unknown input scenario: {args.scenario}")
+    branches = load_branch_inventory(
+        Path(args.branches).resolve(),
+        assets.identity.sha256,
+    )
+    report_path, report = trace_loop_parity(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        definitions[args.scenario],
+        branches,
+        vblanks=int(args.vblanks),
+        max_events=int(args.max_events),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -849,6 +886,15 @@ def build_parser() -> argparse.ArgumentParser:
     scratch_audit.add_argument("--scenarios", default="config/input_scenarios.example.json")
     scratch_audit.add_argument("--timeout", type=float, default=60.0)
     scratch_audit.set_defaults(func=command_audit_scratch)
+
+    loop_parity = subparsers.add_parser("trace-loop-parity")
+    loop_parity.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    loop_parity.add_argument("--scenario", default="accelerate-straight-600")
+    loop_parity.add_argument("--branches", default="config/loop_parity_branches.example.json")
+    loop_parity.add_argument("--vblanks", type=int, default=600)
+    loop_parity.add_argument("--max-events", type=int, default=20000)
+    loop_parity.add_argument("--timeout", type=float, default=60.0)
+    loop_parity.set_defaults(func=command_trace_loop_parity)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)

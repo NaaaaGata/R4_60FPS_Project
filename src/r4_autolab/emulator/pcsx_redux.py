@@ -48,6 +48,7 @@ class PCSXLaunchOptions:
     portable_directory: Path | None = None
     bios: Path | None = None
     iso: Path | None = None
+    read_only: bool = False
 
 
 def build_pcsx_redux_args(options: PCSXLaunchOptions) -> list[str]:
@@ -170,6 +171,7 @@ class PCSXReduxAdapter:
             portable_directory=portable,
             bios=self.options.bios,
             iso=self.options.iso,
+            read_only=self.options.read_only,
         )
         environment = os.environ.copy()
         environment.update(
@@ -180,6 +182,7 @@ class PCSXReduxAdapter:
                 "R4_AUTOLAB_SESSION_TOKEN": self.bridge.session_token,
                 "R4_AUTOLAB_INTERPRETER": "1" if effective_options.interpreter else "0",
                 "R4_AUTOLAB_DEBUGGER": "1" if effective_options.debugger else "0",
+                "R4_AUTOLAB_READ_ONLY": "1" if effective_options.read_only else "0",
             }
         )
         self._acquire_process_lock()
@@ -244,6 +247,8 @@ class PCSXReduxAdapter:
         return data
 
     def write_memory(self, address: int, data: bytes) -> None:
+        if self.options.read_only:
+            raise RuntimeError("memory writes are disabled for this read-only PCSX session")
         self._request(
             "write_memory",
             {"address": address, "data_base64": base64.b64encode(data).decode("ascii")},
