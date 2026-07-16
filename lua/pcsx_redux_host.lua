@@ -219,6 +219,7 @@ function Host:display_buffer() return -1 end
 function Host:gpu_hash() return 'unavailable-phase-3a' end
 function Host:dropped_event_count() return self.dropped end
 function Host:get_registers() return register_snapshot() end
+function Host:get_cpu_cycles() return tonumber(PCSX.getCPUCycles()) end
 
 function Host:read_memory(address, size)
     address, size = safe_memory_range(address, size)
@@ -270,6 +271,8 @@ function Host:set_breakpoint(specification)
                     kind = 'event', event = 'breakpoint', breakpoint_id = identifier,
                     access = specification.access,
                     pc = snapshot.pc, ra = snapshot.ra, sp = snapshot.sp,
+                    gprs = snapshot.gprs, vblank_index = self.vblank_count,
+                    cpu_cycles = self:get_cpu_cycles(),
                     accessed_address = tonumber(actual_address), access_width = tonumber(actual_width), cause = tostring(cause),
                 })
             end)
@@ -387,7 +390,7 @@ function Host:dispatch(operation, payload)
     elseif operation == 'pause' then PCSX.pauseEmulator(); return { paused = true }
     elseif operation == 'resume' then PCSX.resumeEmulator(); return { resumed = true }
     elseif operation == 'shutdown' then self:clear_pad_overrides(); PCSX.quit(0); return { shutting_down = true }
-    elseif operation == 'get_cpu_cycles' then return { cycles = tonumber(PCSX.getCPUCycles()) }
+    elseif operation == 'get_cpu_cycles' then return { cycles = self:get_cpu_cycles() }
     elseif operation == 'get_vblank_count' then return { count = self.vblank_count }
     elseif operation == 'run_vblanks' then
         local count = integer(payload.count, 'VBlank count')

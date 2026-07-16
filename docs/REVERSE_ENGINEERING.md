@@ -31,3 +31,9 @@ The following are public-analysis leads copied from `Agents.md`, not confirmed f
 Verify target identity and value cadence, then capture write PCs for `0x800AC064` and vehicle coordinates, read PCs for those coordinates during rendering, and camera read/write PCs. Every hit must include VBlank, PC, RA, SP, relevant GPRs, accessed address/width, and dropped-event count. Only then export the surrounding functions and callers in Ghidra.
 
 Boot/title Read/Write PCs for the camera candidate are recorded in `docs/FIRST_R4_OBSERVATION.md`. Race functions and the other candidate semantics remain unconfirmed. No patch is proposed.
+
+## Deterministic race evidence — 2026-07-17
+
+The validated Japanese race state disproves the published vehicle/frame candidates for this build: `0x800AC064`, `0x800AC0D0/D4/D8`, `0x800AC104`, `0x800AC288`, and `0x800AC32C` remained zero over 600 moving-race VBlanks and produced no bounded accesses in their configured phases.
+
+`0x801FFF58` changed at approximately 30 Hz and produced bounded Read/Write events, but lies immediately below the observed stack pointer and was accessed by many unrelated PCs. It is classified as **dynamic stack-region evidence, camera semantics unconfirmed/rejected**. See `docs/RACE_TRACE.md` for exact sources and limits.

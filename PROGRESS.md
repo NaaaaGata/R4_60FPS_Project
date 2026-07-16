@@ -17,6 +17,7 @@
 | Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
 | Race-state capture | COMPLETE | One-Enter raw capture and three-process deterministic reload PASS |
 | Deterministic input | COMPLETE | Official Lua Pad override; five scenarios × three attempts PASS |
+| Deterministic race trace | COMPLETE FOR PUBLISHED CANDIDATES | 600 VBlanks; bounded ordered Read/Write phases; public vehicle addresses disproven |
 
 Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
 
@@ -259,3 +260,22 @@ Date: 2026-07-17 JST
 - `steer-left-300`: `cc80765cf7e03e2705273c4fbd29a0568f1f9e57fd78a489f7312b5c3879c387`
 - `steer-right-300`: `cc549a7914be79870911596997eb5b140e78fe52f6b1a154abf1ce70d6ebee06`
 - `accelerate-and-steer-600`: `d4654a9d48923549cac753a435e6f1793face25d122c91f1a85f793245fb1040`
+
+## Section 11 — Bounded deterministic race trace
+
+Date: 2026-07-17 JST
+
+### Execution
+
+- Collected exactly 600 race VBlanks with deterministic acceleration and all eight configured watches.
+- Ran ordered Write phases for frame, XYZ, speed, RPM, heading, and camera candidates, then Read phases for XYZ and camera.
+- Every breakpoint was limited to 32 hits and every phase reloaded the verified state before 120 VBlanks.
+- Events include VBlank, CPU cycle, PC/RA/SP/GPR, access/cause, scenario, state hash, and input hash.
+
+### Evidence
+
+- Frame/XYZ/heading/speed/RPM published candidates: constant zero, zero bounded accesses.
+- `0x801FFF58`: 299 changes over 600 samples, approximately 29.985 Hz, with capped 32 Write and 32 Read events.
+- `0x801FFF58` lies 0x38 bytes below captured SP and has many unrelated source PCs; its public camera label is rejected pending stronger mapping.
+- PASS: all phases completed, cleanup succeeded, 600 telemetry and 64 bounded breakpoint events retained locally.
+- No candidate address write, RAM patch, large dump, or unbounded exploration occurred.

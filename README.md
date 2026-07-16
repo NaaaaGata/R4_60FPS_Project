@@ -39,6 +39,7 @@ r4-autolab inspect-input /path/to/owned/file
 r4-autolab inspect-disc --cue /path/to/owned/disc.cue --extract-directory private/extracted
 r4-autolab capture-manual-state --name race-straight
 r4-autolab replay-input --attempts 3 --sample-every 60
+r4-autolab trace-race --vblanks 600 --breakpoint-vblanks 120 --max-hits 32
 r4-autolab r4-observe --cue /path/to/owned/disc.cue --vblanks 600
 r4-autolab baseline --scenario fake-straight
 r4-autolab experiment --proposal config/fake_candidate.example.json

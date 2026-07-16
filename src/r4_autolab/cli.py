@@ -45,6 +45,7 @@ from .campaign import CampaignBudget, CampaignRunner
 from .codex_client import FakeCodexClient
 from .state_capture import discover_r4_assets, run_manual_capture
 from .input_replay import load_input_scenarios, run_real_input_replays
+from .race_trace import trace_r4_race
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -321,6 +322,34 @@ def command_replay_input(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "PASS" else 2
 
 
+def command_trace_race(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for race tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for race tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    report_path, report = trace_r4_race(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        telemetry_vblanks=int(args.vblanks),
+        breakpoint_vblanks=int(args.breakpoint_vblanks),
+        max_hits=int(args.max_hits),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -529,6 +558,13 @@ def build_parser() -> argparse.ArgumentParser:
     replay_input.add_argument("--sample-every", type=int, default=60)
     replay_input.add_argument("--timeout", type=float, default=60.0)
     replay_input.set_defaults(func=command_replay_input)
+
+    trace_race = subparsers.add_parser("trace-race")
+    trace_race.add_argument("--vblanks", type=int, default=600)
+    trace_race.add_argument("--breakpoint-vblanks", type=int, default=120)
+    trace_race.add_argument("--max-hits", type=int, default=32)
+    trace_race.add_argument("--timeout", type=float, default=60.0)
+    trace_race.set_defaults(func=command_trace_race)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)
