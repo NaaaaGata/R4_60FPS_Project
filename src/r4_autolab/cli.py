@@ -39,6 +39,8 @@ from .ghidra.runner import (
     cache_key,
     discover_analyze_headless,
 )
+from .campaign import CampaignBudget, CampaignRunner
+from .codex_client import FakeCodexClient
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -332,7 +334,23 @@ def command_campaign(args: argparse.Namespace) -> int:
     mode = "execute" if args.execute else "dry-run"
     print(json.dumps({"mode": mode, "validated_budget": budget}, indent=2, sort_keys=True))
     if args.execute:
-        raise RuntimeError("campaign execution is intentionally deferred until resumable policy tests are added")
+        if not args.fake_codex:
+            raise RuntimeError("campaign execution requires --fake-codex; real Codex remains explicitly disabled")
+        project = _load_config(args)
+        stamp = _timestamp_id("campaign")
+        baseline = ExperimentProposal(stamp + "-baseline", "campaign fake baseline", _target(project))
+        candidate_value = json.loads((project.root / "config/fake_candidate.example.json").read_text(encoding="utf-8"))
+        candidate_value["id"] = stamp + "-candidate"
+        candidate = ExperimentProposal.from_dict(candidate_value)
+        with ExperimentStore(project.database) as store:
+            report = CampaignRunner(
+                store,
+                _supervisor(project, store),
+                FakeCodexClient([candidate]),
+                CampaignBudget.from_dict(budget),
+                project.runs_dir / "campaigns" / stamp,
+            ).run(baseline, args.scenario or project.scenario, args.vblanks or project.vblanks)
+        print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 
@@ -425,6 +443,9 @@ def build_parser() -> argparse.ArgumentParser:
     campaign = subparsers.add_parser("campaign")
     campaign.add_argument("--config", dest="campaign_config", required=True)
     campaign.add_argument("--execute", action="store_true")
+    campaign.add_argument("--fake-codex", action="store_true")
+    campaign.add_argument("--scenario")
+    campaign.add_argument("--vblanks", type=int)
     campaign.set_defaults(func=command_campaign)
 
     capabilities = subparsers.add_parser("pcsx-capabilities")

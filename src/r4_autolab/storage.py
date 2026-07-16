@@ -50,6 +50,12 @@ class ExperimentStore(AbstractContextManager["ExperimentStore"]):
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (baseline_id, experiment_id)
             );
+            CREATE TABLE IF NOT EXISTS campaigns (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                report_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             """
         )
         self.connection.commit()
@@ -141,6 +147,23 @@ class ExperimentStore(AbstractContextManager["ExperimentStore"]):
             (experiment_id,),
         )
         return [str(row[0]) for row in rows]
+
+    def save_campaign(self, campaign_id: str, status: str, report: dict[str, Any]) -> None:
+        self.connection.execute(
+            """INSERT INTO campaigns (id, status, report_json) VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET status=excluded.status,
+            report_json=excluded.report_json, updated_at=CURRENT_TIMESTAMP""",
+            (campaign_id, status, json.dumps(report, sort_keys=True)),
+        )
+        self.connection.commit()
+
+    def get_campaign(self, campaign_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute("SELECT * FROM campaigns WHERE id = ?", (campaign_id,)).fetchone()
+        if row is None:
+            return None
+        value = dict(row)
+        value["report"] = json.loads(value["report_json"])
+        return value
 
     def close(self) -> None:
         self.connection.close()

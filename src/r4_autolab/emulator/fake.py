@@ -32,6 +32,8 @@ class FakeEmulator:
         if self.running:
             raise RuntimeError("fake emulator is already running")
         self.running = True
+        self.vblank = 0
+        self.events.clear()
         self.scenario = config.scenario
         self.run_dir = config.run_dir
         return {"pid": "fake", "scenario": self.scenario}

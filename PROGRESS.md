@@ -13,7 +13,7 @@
 | Phase 3B: PCSX-Redux remaining bridge | COMPLETE | Extended real smoke: breakpoint lifecycle and raw-state roundtrip passed |
 | Phase 4: Static analysis bridge | COMPLETE WITH REAL-SMOKE BLOCKER | Headless runner/cache/export script/fake tests complete; Ghidra absent |
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
-| Phase 6: Codex research loop | PENDING | Campaign is dry-run validation only |
+| Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
 | Phase 7: First R4 investigation | PENDING | Owned disc exists; deterministic race state/input not yet configured |
 
 ## Section 1 — Baseline audit (Phase 0 through Phase 3A)
@@ -112,3 +112,27 @@ Date: 2026-07-17 JST
 ### Remaining evidence dependencies
 
 - AI, lap, gear, steering, collision, drift, and replay checks are implemented only when those fields are supplied by a future real trace configuration; no success claim is made without them.
+
+## Section 5 — Phase 6 constrained Codex research loop
+
+Date: 2026-07-17 JST
+
+### Implemented
+
+- Exchangeable `CodexClient`, deterministic Fake client, and explicitly disabled real `codex exec` client.
+- Real adapter argument construction uses ephemeral, read-only, JSON-Schema-constrained output and final-message file capture.
+- Campaign budgets, one-proposal context compression, change deduplication, SQLite campaign status, JSON report, and completed-run resume.
+- `campaign --execute` requires `--fake-codex`; no real nested Codex invocation is reachable by default.
+
+### Verification
+
+- Fake campaign completed baseline and one render-only candidate with game-speed ratio 1.0 and zero position/speed/RPM delta.
+- Campaign integration exposed and fixed a Fake Emulator VBlank-reset reproducibility bug.
+- `pytest`: 41 passed.
+- `mypy src`: success for 26 source files.
+
+### Real Codex boundary
+
+- No real Codex subprocess or API call was made.
+- Real enablement requires a separate trusted deployment setting and operator-approved non-zero cost budget; default example cost remains 0.0.
+- The adapter follows the current official non-interactive Codex schema-output and least-privilege guidance documented in `docs/CODEX_LOOP.md`.

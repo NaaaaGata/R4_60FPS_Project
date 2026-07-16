@@ -41,6 +41,7 @@ r4-autolab compare <baseline-id> <experiment-id>
 r4-autolab trace-summary <run-id>
 r4-autolab report <run-id>
 r4-autolab campaign --config config/budgets.example.toml
+r4-autolab campaign --config config/budgets.example.toml --execute --fake-codex
 r4-autolab stop
 ```
 
