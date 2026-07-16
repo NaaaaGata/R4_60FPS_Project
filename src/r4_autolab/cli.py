@@ -55,6 +55,7 @@ from .loop_parity import load_branch_inventory, trace_loop_parity
 from .gpu_trace import trace_gpu_buffers
 from .call_order import trace_race_call_order
 from .vehicle_probe import trace_input_and_engine_state
+from .ai_trace import trace_ai_trajectories
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -632,6 +633,35 @@ def command_trace_input_engine(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "PASS" else 2
 
 
+def command_trace_ai_trajectories(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for AI trajectory tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for AI trajectory tracing")
+    assets = discover_r4_assets(
+        config.root, executable, cue_override=config.disc_path, bios_override=config.bios_path
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    if args.scenario not in definitions:
+        raise ValueError(f"unknown input scenario: {args.scenario}")
+    report_path, report = trace_ai_trajectories(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        definitions[args.scenario],
+        attempts=int(args.attempts),
+        vblanks=int(args.vblanks),
+        sample_every=int(args.sample_every),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -1017,6 +1047,15 @@ def build_parser() -> argparse.ArgumentParser:
     input_engine.add_argument("--max-hits", type=int, default=64)
     input_engine.add_argument("--timeout", type=float, default=60.0)
     input_engine.set_defaults(func=command_trace_input_engine)
+
+    ai_trajectories = subparsers.add_parser("trace-ai-trajectories")
+    ai_trajectories.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    ai_trajectories.add_argument("--scenario", default="accelerate-straight-600")
+    ai_trajectories.add_argument("--attempts", type=int, default=3)
+    ai_trajectories.add_argument("--vblanks", type=int, default=600)
+    ai_trajectories.add_argument("--sample-every", type=int, default=2)
+    ai_trajectories.add_argument("--timeout", type=float, default=60.0)
+    ai_trajectories.set_defaults(func=command_trace_ai_trajectories)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)

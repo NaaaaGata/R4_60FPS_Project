@@ -100,6 +100,8 @@ Over a separate 600-VBlank run, active and duplicate intervals alternated exactl
 
 A 240-VBlank GPU trace decoded opposing 320×240 display/draw pages at VRAM Y=0 and Y=240. It bounded-traversed both submitted ordering tables on all 120 active frames: the primary content hash changed on every active frame, the secondary list was stable, and duplicates made no submission and reused the prior command/screenshot hashes. See `docs/R4_GPU_PIPELINE.md`.
 
+Three independent 600-VBlank AI runs validated eight unique vehicle objects and produced identical 300-sample trajectories. The shared `FUN_80038338` dispatcher hit exactly 300 times per run, while every AI changed X/Z/progress on nearly every active sample. This confirms individual AI motion is part of the same 30 Hz update, not merely a dispatcher inference.
+
 ## Consequence for experiments
 
 A safe 60 fps candidate cannot be inferred by simply removing a wait or doubling the whole loop: the measured loop contains physics, AI, camera, timer, HUD, and rendering together. Such a change has a high risk of doubling game speed and invalidating lap timing. The next patch candidate must first isolate a render-only call path or introduce interpolation with explicit evidence. Until then, patch generation remains gated off.

@@ -434,3 +434,15 @@ Date: 2026-07-17 JST
 - The player object search was strictly limited to 0x400 bytes and retained only ranked field summaries, not object dumps.
 - PASS: all five scenarios, zero R4 writes, normal shutdown, no residual PCSX process.
 - Details: `docs/R4_INPUT_PATH.md` and `docs/R4_RPM_INVESTIGATION.md`.
+
+## Section 21 — Three-run AI trajectory verification
+
+Date: 2026-07-17 JST
+
+- Added strict active-count and pointer-table validation: 8 unique aligned vehicle objects, verified player first, all fixed field windows inside PS1 RAM.
+- Three fresh PCSX processes each ran 600 VBlanks and sampled all eight vehicles every two VBlanks.
+- All 900 multi-vehicle samples matched exactly across attempts; each run recorded 300 shared `FUN_80038338` dispatcher hits.
+- Every AI changed X/Z/progress on nearly every active sample; orientation and speed changes remained value-dependent.
+- Individual trajectories confirm player and seven AI cars are coupled to the 30 Hz dispatcher.
+- A player/camera-only interpolation design would leave seven visible AI cars stepped and is therefore incomplete.
+- PASS with zero R4 writes, normal shutdown, and no residual PCSX process. Details: `docs/R4_AI_TRAJECTORIES.md`.
