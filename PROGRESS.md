@@ -421,3 +421,16 @@ Date: 2026-07-17 JST
 - Two isolated HUD primitive builders survive the coarse side-effect exclusion but cannot redraw the 3D scene.
 - No render-only boundary is proven; no R4 memory write or patch was attempted.
 - Detailed callsites, roles, confidence, side effects, and boundary decisions: `docs/R4_RENDER_BOUNDARY.md`.
+
+## Section 20 — Input normalization and engine-speed candidate
+
+Date: 2026-07-17 JST
+
+- Five state-reloaded Pad override scenarios ran for 120 VBlanks each with a fixed 0x400-byte player-object window and six bounded breakpoints.
+- `FUN_8004AA7C` normalizes input once per active frame: `0x8004AD40` writes edge bits at `0x800F3820`, and `0x8004B6C4` writes held bits at `0x800F3822`.
+- Dynamic masks: CROSS `0x0040`, LEFT `0x8000`, RIGHT `0x2000`, and CROSS+LEFT `0x8040` in the high halfword. The raw SIO packet remains UNKNOWN.
+- `0x800F4A50` is written by vehicle function `FUN_80023924`, read by vehicle logic and the overlay HUD/audio path, and changes once per active frame.
+- Its scenario ranges and non-uniform speed correlations support “engine-speed-related candidate”; no calibrated RPM unit is claimed.
+- The player object search was strictly limited to 0x400 bytes and retained only ranked field summaries, not object dumps.
+- PASS: all five scenarios, zero R4 writes, normal shutdown, no residual PCSX process.
+- Details: `docs/R4_INPUT_PATH.md` and `docs/R4_RPM_INVESTIGATION.md`.
