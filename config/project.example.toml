@@ -1,0 +1,23 @@
+[project]
+name = "r4-jpn-research"
+mode = "fake"
+runs_dir = "runs"
+database = "runs/experiments.sqlite3"
+
+[target]
+serial = "unknown-until-verified"
+executable_sha256 = ""
+disc_path = ""
+bios_path = ""
+save_state = ""
+
+[emulator]
+executable = ""
+lua_bootstrap = "lua/bootstrap.lua"
+ipc_directory = "runs/ipc"
+request_timeout_seconds = 5.0
+
+[experiment]
+vblanks = 120
+scenario = "fake-straight"
+

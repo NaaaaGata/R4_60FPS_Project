@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["protocol_version", "kind", "sequence", "experiment_id", "vblank_index", "pc", "ra", "sp", "gpu_hash"],
+  "properties": {
+    "protocol_version": {"const": 1},
+    "kind": {"const": "event"},
+    "sequence": {"type": "integer", "minimum": 0},
+    "experiment_id": {"type": "string"},
+    "vblank_index": {"type": "integer", "minimum": 0},
+    "pc": {"type": "string"},
+    "ra": {"type": "string"},
+    "sp": {"type": "string"},
+    "gpu_hash": {"type": "string"},
+    "dropped_event_count": {"type": "integer", "minimum": 0}
+  }
+}
+

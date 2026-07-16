@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["vblanks", "elapsed_seconds", "game_timer", "unique_gpu_states", "duplicate_frame_ratio", "crashed", "frozen"],
+  "properties": {
+    "vblanks": {"type": "integer", "minimum": 1},
+    "elapsed_seconds": {"type": "number", "minimum": 0},
+    "game_timer": {"type": "number", "minimum": 0},
+    "unique_gpu_states": {"type": "integer", "minimum": 0},
+    "duplicate_frame_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+    "crashed": {"type": "boolean"},
+    "frozen": {"type": "boolean"}
+  }
+}

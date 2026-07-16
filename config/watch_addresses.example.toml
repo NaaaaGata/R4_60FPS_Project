@@ -1,0 +1,21 @@
+[[watch]]
+name = "frame_candidate"
+address = "0x800AC064"
+width = 4
+sample_every_vblanks = 1
+confidence = "unverified"
+
+[[watch]]
+name = "player_x_candidate"
+address = "0x800AC0D0"
+width = 4
+sample_every_vblanks = 1
+confidence = "unverified"
+
+[[watch]]
+name = "speed_candidate"
+address = "0x800AC288"
+width = 4
+sample_every_vblanks = 1
+confidence = "unverified"
+

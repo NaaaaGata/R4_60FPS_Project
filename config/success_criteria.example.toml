@@ -1,0 +1,18 @@
+[timing]
+game_speed_ratio_min = 0.98
+game_speed_ratio_max = 1.02
+
+[physics]
+max_position_delta = 0.01
+max_speed_delta = 0.01
+max_rpm_delta = 1.0
+
+[rendering]
+minimum_unique_states_per_second = 58
+maximum_duplicate_ratio = 0.05
+
+[stability]
+allow_crash = false
+allow_freeze = false
+allow_black_screen = false
+

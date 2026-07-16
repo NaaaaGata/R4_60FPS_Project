@@ -1,0 +1,27 @@
+{
+  "id": "candidate-fake-render-60hz",
+  "hypothesis": "fake alternate-frame render gate is disabled while physics remains at 30 Hz",
+  "target_version": {
+    "serial": "FAKE",
+    "executable_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "changes": [
+    {
+      "address": "0x80010000",
+      "width": 4,
+      "expected_original_hex": "00000000",
+      "replacement_hex": "01000000",
+      "instruction_before": "fake render every second VBlank",
+      "instruction_after": "fake render every VBlank",
+      "evidence": ["fake-adapter-contract-v1"]
+    }
+  ],
+  "predicted_effects": {
+    "render_hz": 60,
+    "physics_hz": 30,
+    "game_speed_ratio": 1.0
+  },
+  "stop_conditions": ["crash", "restoration-failure"],
+  "evaluation_profile": "default"
+}
+

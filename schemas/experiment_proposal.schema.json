@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://r4-autolab.local/schemas/experiment_proposal.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "hypothesis", "target_version", "changes", "stop_conditions", "evaluation_profile"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$"},
+    "hypothesis": {"type": "string", "minLength": 1},
+    "target_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serial", "executable_sha256"],
+      "properties": {
+        "serial": {"type": "string", "minLength": 1},
+        "executable_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}
+      }
+    },
+    "changes": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["address", "width", "expected_original_hex", "replacement_hex", "evidence"],
+        "properties": {
+          "address": {"type": "string", "pattern": "^0x[0-9a-fA-F]{8}$"},
+          "width": {"enum": [1, 2, 4]},
+          "expected_original_hex": {"type": "string", "pattern": "^[0-9a-fA-F]+$"},
+          "replacement_hex": {"type": "string", "pattern": "^[0-9a-fA-F]+$"},
+          "instruction_before": {"type": "string"},
+          "instruction_after": {"type": "string"},
+          "evidence": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "predicted_effects": {"type": "object"},
+    "stop_conditions": {"type": "array", "items": {"type": "string"}},
+    "evaluation_profile": {"type": "string", "minLength": 1}
+  }
+}
+
