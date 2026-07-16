@@ -41,8 +41,16 @@ from .ghidra.runner import (
     cache_key,
     discover_analyze_headless,
 )
-from .campaign import CampaignBudget, CampaignRunner
-from .codex_client import FakeCodexClient
+from .campaign import CampaignBudget, CampaignRunner, ProposalCampaignRunner
+from .codex_client import CodexExecClient, FakeCodexClient, discover_codex, verify_codex_executable
+from .state_capture import discover_r4_assets, run_manual_capture
+from .input_replay import load_input_scenarios, run_real_input_replays
+from .race_trace import trace_r4_race
+from .function_trace import trace_function_cadence
+from .overlay_probe import probe_runtime_overlay
+from .targeted_trace import parse_target_watch, trace_targeted_addresses
+from .render_cadence import measure_render_cadence
+from .scratch_audit import audit_scratch_location
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -92,9 +100,14 @@ def _load_config(args: argparse.Namespace) -> ProjectConfig:
     return load_project_config(path)
 
 
-def command_doctor(_: argparse.Namespace) -> int:
+def command_doctor(args: argparse.Namespace) -> int:
     python_ok = sys.version_info >= (3, 11)
     pcsx_path = discover_pcsx_redux()
+    configured_ghidra: Path | None = None
+    config_path = Path(args.config)
+    if config_path.is_file():
+        configured_ghidra = load_project_config(config_path).ghidra_headless
+    ghidra_path = discover_analyze_headless(configured_ghidra)
     pcsx_version: str | None = None
     if pcsx_path is not None:
         try:
@@ -107,7 +120,7 @@ def command_doctor(_: argparse.Namespace) -> int:
         ("Git", shutil.which("git"), None, False, True),
         ("Codex CLI", os.environ.get("R4_AUTOLAB_CODEX") or shutil.which("codex"), None, False, True),
         ("PCSX-Redux", str(pcsx_path) if pcsx_path else None, pcsx_version, False, True),
-        ("Ghidra analyzeHeadless", os.environ.get("R4_AUTOLAB_GHIDRA_HEADLESS") or shutil.which("analyzeHeadless"), None, False, True),
+        ("Ghidra analyzeHeadless", str(ghidra_path) if ghidra_path else None, None, False, True),
         ("Java", shutil.which("java"), None, False, True),
     ]
     print(f"R4 AutoLab {__version__}")
@@ -261,6 +274,232 @@ def command_r4_observe(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_capture_manual_state(args: argparse.Namespace) -> int:
+    config_path = Path(args.config).resolve()
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for manual state capture")
+    cue = Path(args.cue).resolve() if args.cue else config.disc_path
+    bios = Path(args.bios).resolve() if args.bios else config.bios_path
+    output_directory = Path(args.output_directory).resolve() if args.output_directory else None
+    result = run_manual_capture(
+        config.root,
+        config_path,
+        executable,
+        config.lua_bootstrap.resolve(),
+        name=str(args.name),
+        cue=cue,
+        bios=bios,
+        output_directory=output_directory,
+        timeout_seconds=max(float(args.timeout), config.timeout_seconds),
+        no_shutdown=bool(args.no_shutdown),
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 2 if result["validation_status"] == "FAIL" else 0
+
+
+def command_replay_input(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for deterministic input replay")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for deterministic input replay")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    names = list(args.scenario) if args.scenario else list(definitions)
+    unknown = sorted(set(names) - set(definitions))
+    if unknown:
+        raise ValueError("unknown input scenarios: " + ", ".join(unknown))
+    report_path, report = run_real_input_replays(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        [definitions[name] for name in names],
+        attempts=int(args.attempts),
+        sample_every=int(args.sample_every),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_race(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for race tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for race tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    report_path, report = trace_r4_race(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        telemetry_vblanks=int(args.vblanks),
+        breakpoint_vblanks=int(args.breakpoint_vblanks),
+        max_hits=int(args.max_hits),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_functions(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for function tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for function tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    addresses = tuple(int(value, 0) for value in args.address)
+    report_path, report = trace_function_cadence(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        addresses,
+        vblanks=int(args.vblanks),
+        max_hits=int(args.max_hits),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_probe_overlay(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for overlay probing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for overlay probing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    report_path, report = probe_runtime_overlay(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        int(args.address, 0),
+        size=int(args.size),
+        extract_length=int(args.extract_length, 0) if args.extract_length else None,
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_addresses(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for targeted address tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for targeted address tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    watches = tuple(parse_target_watch(value) for value in args.watch)
+    report_path, report = trace_targeted_addresses(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        watches,
+        vblanks=int(args.vblanks),
+        max_write_hits=int(args.max_hits),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_render_cadence(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for render cadence measurement")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for render cadence measurement")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    report_path, report = measure_render_cadence(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        vblanks=int(args.vblanks),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_audit_scratch(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for scratch auditing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for scratch auditing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    report_path, report = audit_scratch_location(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        int(args.address, 0),
+        tuple(definitions.values()),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -363,23 +602,71 @@ def command_campaign(args: argparse.Namespace) -> int:
     mode = "execute" if args.execute else "dry-run"
     print(json.dumps({"mode": mode, "validated_budget": budget}, indent=2, sort_keys=True))
     if args.execute:
-        if not args.fake_codex:
-            raise RuntimeError("campaign execution requires --fake-codex; real Codex remains explicitly disabled")
+        if bool(args.fake_codex) == bool(args.real_codex):
+            raise RuntimeError("campaign execution requires exactly one of --fake-codex or --real-codex")
         project = _load_config(args)
         stamp = _timestamp_id("campaign")
-        baseline = ExperimentProposal(stamp + "-baseline", "campaign fake baseline", _target(project))
-        candidate_value = json.loads((project.root / "config/fake_candidate.example.json").read_text(encoding="utf-8"))
-        candidate_value["id"] = stamp + "-candidate"
-        candidate = ExperimentProposal.from_dict(candidate_value)
-        with ExperimentStore(project.database) as store:
-            report = CampaignRunner(
-                store,
-                _supervisor(project, store),
-                FakeCodexClient([candidate]),
-                CampaignBudget.from_dict(budget),
-                project.runs_dir / "campaigns" / stamp,
-            ).run(baseline, args.scenario or project.scenario, args.vblanks or project.vblanks)
+        campaign_budget = CampaignBudget.from_dict(budget)
+        output_directory = project.runs_dir / "campaigns" / stamp
+        if args.fake_codex:
+            baseline = ExperimentProposal(stamp + "-baseline", "campaign fake baseline", _target(project))
+            candidate_value = json.loads(
+                (project.root / "config/fake_candidate.example.json").read_text(encoding="utf-8")
+            )
+            candidate_value["id"] = stamp + "-candidate"
+            candidate = ExperimentProposal.from_dict(candidate_value)
+            with ExperimentStore(project.database) as store:
+                report = CampaignRunner(
+                    store,
+                    _supervisor(project, store),
+                    FakeCodexClient([candidate]),
+                    campaign_budget,
+                    output_directory,
+                ).run(baseline, args.scenario or project.scenario, args.vblanks or project.vblanks)
+        else:
+            if project.mode != "real":
+                raise RuntimeError("real Codex campaign requires project.mode=real")
+            codex = discover_codex()
+            if codex is None:
+                raise RuntimeError("a current Codex CLI executable was not found")
+            codex_identity = verify_codex_executable(codex)
+            with ExperimentStore(project.database) as store:
+                report = ProposalCampaignRunner(
+                    store,
+                    CodexExecClient(
+                        codex,
+                        project.root / "schemas" / "experiment_proposal.schema.json",
+                        output_directory / "codex",
+                        enabled=True,
+                        timeout_seconds=min(float(campaign_budget.max_seconds), 300.0),
+                    ),
+                    campaign_budget,
+                    output_directory,
+                    _target(project),
+                    (
+                        "target serial is SLPS-01800",
+                        "target executable SHA-256 is 95a9dc1e81039d5a404091bf75bb1fb67c32f693faa04b629fb48073b2641775",
+                        "the captured race state is reproducible",
+                        "raw displayed image changes at 29.97 Hz in exact two-VBlank runs",
+                        "vehicle/AI dispatcher, camera, lap timer, and race overlay all execute at 30 Hz",
+                        "the active race path is an integrated 30 Hz loop",
+                        "no isolated render-only instruction or reviewed patch candidate exists",
+                        "published candidate addresses were disproven for this build",
+                    ),
+                    allowed_change_fingerprints=frozenset(),
+                ).run()
+            report["codex_identity"] = codex_identity
+            (output_directory / "campaign.json").write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            with ExperimentStore(project.database) as store:
+                store.save_campaign(
+                    stamp,
+                    "FAILED" if report.get("stop_reason") == "codex_client_error" else "COMPLETED",
+                    report,
+                )
         print(json.dumps(report, indent=2, sort_keys=True))
+        return 2 if report.get("stop_reason") == "codex_client_error" else 0
     return 0
 
 
@@ -392,20 +679,67 @@ def command_stop(args: argparse.Namespace) -> int:
 
 
 def command_ghidra_export(args: argparse.Namespace) -> int:
+    project = _load_config(args)
     input_file = Path(args.input).resolve()
     if not input_file.is_file():
         raise FileNotFoundError(input_file)
     addresses = tuple(int(value, 0) for value in args.address)
     script_directory = (Path(__file__).resolve().parents[2] / "ghidra_scripts").resolve()
     script_file = script_directory / "R4Export.java"
-    key = cache_key(input_file, script_file, addresses, args.processor)
+    prepare_script = script_directory / "R4Prepare.java"
+    header = input_file.read_bytes()[:0x800]
+    is_psx_exe = len(header) >= 0x20 and header.startswith(b"PS-X EXE")
+    processor = args.processor
+    loader: str | None = None
+    loader_base: int | None = None
+    loader_offset: int | None = None
+    loader_length: int | None = None
+    entry_point: int | None = None
+    global_pointer: int | None = None
+    block_name: str | None = None
+    if is_psx_exe:
+        entry_point = struct.unpack_from("<I", header, 0x10)[0]
+        global_pointer = struct.unpack_from("<I", header, 0x14)[0]
+        loader_base = struct.unpack_from("<I", header, 0x18)[0]
+        loader_length = struct.unpack_from("<I", header, 0x1C)[0]
+        loader_offset = 0x800
+        if loader_length <= 0 or loader_offset + loader_length > input_file.stat().st_size:
+            raise ValueError("PS-X EXE payload range is invalid")
+        processor = processor or "MIPS:LE:32:default"
+        loader = "BinaryLoader"
+        block_name = "R4_PAYLOAD"
+    elif args.binary_base is not None:
+        loader = "BinaryLoader"
+        loader_base = int(args.binary_base, 0)
+        loader_offset = int(args.binary_file_offset, 0)
+        loader_length = (
+            int(args.binary_length, 0)
+            if args.binary_length
+            else input_file.stat().st_size - loader_offset
+        )
+        if loader_offset < 0 or loader_length <= 0 or loader_offset + loader_length > input_file.stat().st_size:
+            raise ValueError("raw binary import range is invalid")
+        entry_point = int(args.entry_point, 0) if args.entry_point else loader_base
+        global_pointer = int(args.global_pointer, 0) if args.global_pointer else 0
+        processor = processor or "MIPS:LE:32:default"
+        block_name = str(args.block_name)
+    import_options = {
+        "loader": loader,
+        "base": loader_base,
+        "offset": loader_offset,
+        "length": loader_length,
+        "block": block_name,
+        "entry": entry_point,
+        "gp": global_pointer,
+    }
+    key = cache_key(input_file, script_file, addresses, processor, (prepare_script,), import_options)
     output = Path(args.output).resolve() if args.output else Path("runs/static-cache") / key / "export.json"
     output = output.resolve()
     if output.is_file() and not args.force:
         summary = load_static_export(output)
         print(json.dumps({"cached": True, "path": str(output), "summary": summary.__dict__}, indent=2, default=list))
         return 0
-    executable = discover_analyze_headless()
+    executable = discover_analyze_headless(project.ghidra_headless)
     if not args.fake and executable is None:
         raise RuntimeError("Ghidra analyzeHeadless is not installed; rerun with --fake only for integration testing")
     config = GhidraRunConfig(
@@ -415,8 +749,15 @@ def command_ghidra_export(args: argparse.Namespace) -> int:
         project_directory=output.parent / "project",
         script_directory=script_directory,
         addresses=addresses,
-        processor=args.processor,
+        processor=processor,
         timeout_seconds=float(args.timeout),
+        loader=loader,
+        loader_base_address=loader_base,
+        loader_file_offset=loader_offset,
+        loader_length=loader_length,
+        loader_block_name=block_name,
+        entry_point=entry_point,
+        global_pointer=global_pointer,
     )
     runner = FakeGhidraRunner() if args.fake else GhidraHeadlessRunner()
     runner.run(config, output.parent / "ghidra.log")
@@ -453,6 +794,62 @@ def build_parser() -> argparse.ArgumentParser:
     observe.add_argument("--timeout", type=float, default=30.0)
     observe.set_defaults(func=command_r4_observe)
 
+    capture = subparsers.add_parser("capture-manual-state")
+    capture.add_argument("--name", default="race-straight")
+    capture.add_argument("--cue")
+    capture.add_argument("--bios")
+    capture.add_argument("--output-directory")
+    capture.add_argument("--timeout", type=float, default=30.0)
+    capture.add_argument("--no-shutdown", action="store_true")
+    capture.set_defaults(func=command_capture_manual_state)
+
+    replay_input = subparsers.add_parser("replay-input")
+    replay_input.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    replay_input.add_argument("--scenario", action="append")
+    replay_input.add_argument("--attempts", type=int, default=3)
+    replay_input.add_argument("--sample-every", type=int, default=60)
+    replay_input.add_argument("--timeout", type=float, default=60.0)
+    replay_input.set_defaults(func=command_replay_input)
+
+    trace_race = subparsers.add_parser("trace-race")
+    trace_race.add_argument("--vblanks", type=int, default=600)
+    trace_race.add_argument("--breakpoint-vblanks", type=int, default=120)
+    trace_race.add_argument("--max-hits", type=int, default=32)
+    trace_race.add_argument("--timeout", type=float, default=60.0)
+    trace_race.set_defaults(func=command_trace_race)
+
+    trace_functions = subparsers.add_parser("trace-functions")
+    trace_functions.add_argument("--address", action="append", required=True)
+    trace_functions.add_argument("--vblanks", type=int, default=120)
+    trace_functions.add_argument("--max-hits", type=int, default=256)
+    trace_functions.add_argument("--timeout", type=float, default=60.0)
+    trace_functions.set_defaults(func=command_trace_functions)
+
+    overlay = subparsers.add_parser("probe-overlay")
+    overlay.add_argument("--address", required=True)
+    overlay.add_argument("--size", type=int, default=64)
+    overlay.add_argument("--extract-length")
+    overlay.add_argument("--timeout", type=float, default=60.0)
+    overlay.set_defaults(func=command_probe_overlay)
+
+    targeted = subparsers.add_parser("trace-addresses")
+    targeted.add_argument("--watch", action="append", required=True)
+    targeted.add_argument("--vblanks", type=int, default=600)
+    targeted.add_argument("--max-hits", type=int, default=32)
+    targeted.add_argument("--timeout", type=float, default=60.0)
+    targeted.set_defaults(func=command_trace_addresses)
+
+    render_cadence = subparsers.add_parser("render-cadence")
+    render_cadence.add_argument("--vblanks", type=int, default=120)
+    render_cadence.add_argument("--timeout", type=float, default=60.0)
+    render_cadence.set_defaults(func=command_render_cadence)
+
+    scratch_audit = subparsers.add_parser("audit-scratch")
+    scratch_audit.add_argument("--address", required=True)
+    scratch_audit.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    scratch_audit.add_argument("--timeout", type=float, default=60.0)
+    scratch_audit.set_defaults(func=command_audit_scratch)
+
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)
     baseline.add_argument("--id")
@@ -484,6 +881,7 @@ def build_parser() -> argparse.ArgumentParser:
     campaign.add_argument("--config", dest="campaign_config", required=True)
     campaign.add_argument("--execute", action="store_true")
     campaign.add_argument("--fake-codex", action="store_true")
+    campaign.add_argument("--real-codex", action="store_true")
     campaign.add_argument("--scenario")
     campaign.add_argument("--vblanks", type=int)
     campaign.set_defaults(func=command_campaign)
@@ -503,6 +901,12 @@ def build_parser() -> argparse.ArgumentParser:
     ghidra_export.add_argument("--timeout", type=float, default=600.0)
     ghidra_export.add_argument("--force", action="store_true")
     ghidra_export.add_argument("--fake", action="store_true")
+    ghidra_export.add_argument("--binary-base")
+    ghidra_export.add_argument("--binary-file-offset", default="0")
+    ghidra_export.add_argument("--binary-length")
+    ghidra_export.add_argument("--entry-point")
+    ghidra_export.add_argument("--global-pointer")
+    ghidra_export.add_argument("--block-name", default="R4_OVERLAY")
     ghidra_export.set_defaults(func=command_ghidra_export)
 
     visual = subparsers.add_parser("visual-check")

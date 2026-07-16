@@ -38,3 +38,51 @@ def test_fake_export_and_cache_key_are_deterministic(tmp_path: Path) -> None:
     summary = load_static_export(config.output_file)
     assert summary.requested_addresses == ("0x80010000",)
     assert summary.function_count == 0
+
+
+def test_binary_loader_arguments_preserve_psx_payload_mapping(tmp_path: Path) -> None:
+    config = GhidraRunConfig(
+        analyze_headless=Path("analyzeHeadless"),
+        input_file=tmp_path / "SLPS_018.00",
+        output_file=tmp_path / "export.json",
+        project_directory=tmp_path / "project",
+        script_directory=tmp_path / "scripts",
+        addresses=(0x80050194,),
+        processor="MIPS:LE:32:default",
+        timeout_seconds=60,
+        loader="BinaryLoader",
+        loader_base_address=0x80010000,
+        loader_file_offset=0x800,
+        loader_length=638976,
+        loader_block_name="R4_PAYLOAD",
+        entry_point=0x8007D4B4,
+        global_pointer=0x800ABBE8,
+    )
+    arguments = build_headless_args(config)
+    expected_pairs = {
+        "-loader": "BinaryLoader",
+        "-loader-baseAddr": "0x80010000",
+        "-loader-fileOffset": "0x800",
+        "-loader-length": "0x9C000",
+        "-loader-blockName": "R4_PAYLOAD",
+        "-processor": "MIPS:LE:32:default",
+        "-preScript": "R4Prepare.java",
+    }
+    for flag, value in expected_pairs.items():
+        assert arguments[arguments.index(flag) + 1] == value
+    pre_index = arguments.index("-preScript")
+    assert arguments[pre_index + 6] == "R4_PAYLOAD"
+
+
+def test_cache_and_arguments_include_overlay_mapping(tmp_path: Path) -> None:
+    input_file = tmp_path / "overlay.bin"
+    input_file.write_bytes(b"overlay")
+    script = tmp_path / "script.java"
+    script.write_text("script", encoding="utf-8")
+    first = cache_key(
+        input_file, script, (0x80114780,), "MIPS:LE:32:default", import_options={"base": 0x801146F0}
+    )
+    second = cache_key(
+        input_file, script, (0x80114780,), "MIPS:LE:32:default", import_options={"base": 0x80120000}
+    )
+    assert first != second

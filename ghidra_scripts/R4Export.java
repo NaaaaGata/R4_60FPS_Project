@@ -1,31 +1,56 @@
 // @category R4AutoLab
 // Asset-safe JSON metadata export for headless analysis.
 import ghidra.app.script.GhidraScript;
+import ghidra.app.decompiler.DecompInterface;
+import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.Instruction;
+import ghidra.program.model.listing.InstructionIterator;
 import ghidra.program.model.listing.Data;
+import ghidra.program.model.listing.DataIterator;
 import ghidra.program.model.block.BasicBlockModel;
 import ghidra.program.model.block.CodeBlock;
 import ghidra.program.model.block.CodeBlockIterator;
 import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.ReferenceIterator;
-import ghidra.program.util.DefinedDataIterator;
 import java.io.File;
 import java.io.PrintWriter;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 public class R4Export extends GhidraScript {
     private static String quote(String value) {
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+        StringBuilder escaped = new StringBuilder("\"");
+        for (int index = 0; index < value.length(); index++) {
+            char item = value.charAt(index);
+            switch (item) {
+                case '\\': escaped.append("\\\\"); break;
+                case '"': escaped.append("\\\""); break;
+                case '\b': escaped.append("\\b"); break;
+                case '\f': escaped.append("\\f"); break;
+                case '\n': escaped.append("\\n"); break;
+                case '\r': escaped.append("\\r"); break;
+                case '\t': escaped.append("\\t"); break;
+                default:
+                    if (item < 0x20) escaped.append(String.format("\\u%04x", (int)item));
+                    else escaped.append(item);
+            }
+        }
+        return escaped.append('"').toString();
     }
 
     private static String hex(Address address) { return String.format("0x%08X", address.getOffset()); }
+
+    private static String fileOffset(Address address, MemoryBlock payload, long sourceFileOffset) {
+        if (payload == null || !payload.contains(address)) return "unknown";
+        return String.format("0x%X", sourceFileOffset + address.subtract(payload.getStart()));
+    }
 
     private String inputHash() throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -46,11 +71,23 @@ public class R4Export extends GhidraScript {
         if (args.length < 1) throw new IllegalArgumentException("output JSON path is required");
         List<String> requested = new ArrayList<>();
         for (int index = 1; index < args.length; index++) requested.add(args[index]);
+        MemoryBlock payload = currentProgram.getMemory().getBlock("R4_PAYLOAD");
+        long sourceFileOffset = 0x800;
+        if (payload == null) {
+            payload = currentProgram.getMemory().getBlock("R4_OVERLAY");
+            sourceFileOffset = 0;
+        }
+        if (payload == null && !requested.isEmpty()) {
+            payload = currentProgram.getMemory().getBlock(toAddr(requested.get(0)));
+            sourceFileOffset = 0;
+        }
+        Address analysisBase = payload == null ? currentProgram.getImageBase() : payload.getStart();
         try (PrintWriter out = new PrintWriter(new File(args[0]), "UTF-8")) {
             out.println("{");
             out.println("  \"input_sha256\": " + quote(inputHash()) + ",");
             out.println("  \"language_id\": " + quote(currentProgram.getLanguageID().toString()) + ",");
-            out.println("  \"image_base\": " + quote(hex(currentProgram.getImageBase())) + ",");
+            out.println("  \"image_base\": " + quote(hex(analysisBase)) + ",");
+            out.println("  \"program_image_base\": " + quote(hex(currentProgram.getImageBase())) + ",");
             out.print("  \"requested_addresses\": [");
             for (int i = 0; i < requested.size(); i++) { if (i > 0) out.print(","); out.print(quote(requested.get(i))); }
             out.println("],");
@@ -61,7 +98,11 @@ public class R4Export extends GhidraScript {
                 Function function = functions.next();
                 if (!first) out.println(",");
                 first = false;
-                out.print("    {\"name\":" + quote(function.getName()) + ",\"entry\":" + quote(hex(function.getEntryPoint())) + "}");
+                out.print("    {\"name\":" + quote(function.getName()) +
+                    ",\"entry\":" + quote(hex(function.getEntryPoint())) +
+                    ",\"file_offset\":" + quote(fileOffset(function.getEntryPoint(), payload, sourceFileOffset)) +
+                    ",\"start\":" + quote(hex(function.getBody().getMinAddress())) +
+                    ",\"end\":" + quote(hex(function.getBody().getMaxAddress())) + "}");
             }
             out.println("\n  ],");
             out.println("  \"basic_blocks\": [");
@@ -107,7 +148,10 @@ public class R4Export extends GhidraScript {
             out.println("\n  ],");
             out.println("  \"strings\": [");
             first = true;
-            for (Data data : DefinedDataIterator.definedStrings(currentProgram)) {
+            DataIterator definedData = currentProgram.getListing().getDefinedData(true);
+            while (definedData.hasNext()) {
+                Data data = definedData.next();
+                if (!data.hasStringValue()) continue;
                 if (!first) out.println(",");
                 first = false;
                 out.print("    {\"address\":" + quote(hex(data.getAddress())) + ",\"value\":" + quote(String.valueOf(data.getValue())) + "}");
@@ -122,17 +166,80 @@ public class R4Export extends GhidraScript {
                 out.print("    {\"name\":" + quote(block.getName()) + ",\"start\":" + quote(hex(block.getStart())) + ",\"end\":" + quote(hex(block.getEnd())) + "}");
             }
             out.println("\n  ],");
+            out.println("  \"memory_blocks\": [");
+            first = true;
+            for (MemoryBlock block : currentProgram.getMemory().getBlocks()) {
+                if (!first) out.println(",");
+                first = false;
+                out.print("    {\"name\":" + quote(block.getName()) +
+                    ",\"start\":" + quote(hex(block.getStart())) +
+                    ",\"end\":" + quote(hex(block.getEnd())) +
+                    ",\"size\":" + block.getSize() +
+                    ",\"overlay\":" + block.isOverlay() + "}");
+            }
+            out.println("\n  ],");
             out.println("  \"disassembly\": [");
             first = true;
             for (String value : requested) {
                 Address address = toAddr(value);
-                Instruction instruction = getInstructionAt(address);
-                if (instruction != null) {
+                Instruction instruction = getInstructionContaining(address);
+                for (int back = 0; back < 4 && instruction != null; back++) {
+                    Instruction previous = getInstructionBefore(instruction.getAddress());
+                    if (previous == null) break;
+                    instruction = previous;
+                }
+                for (int count = 0; count < 12 && instruction != null; count++) {
                     if (!first) out.println(",");
                     first = false;
-                    out.print("    {\"address\":" + quote(hex(address)) + ",\"text\":" + quote(instruction.toString()) + "}");
+                    out.print("    {\"requested\":" + quote(value) +
+                        ",\"address\":" + quote(hex(instruction.getAddress())) +
+                        ",\"file_offset\":" + quote(fileOffset(instruction.getAddress(), payload, sourceFileOffset)) +
+                        ",\"text\":" + quote(instruction.toString()) +
+                        ",\"delay_slot\":" + instruction.isInDelaySlot() +
+                        ",\"flow_type\":" + quote(instruction.getFlowType().toString()) + "}");
+                    instruction = getInstructionAfter(instruction.getAddress());
                 }
             }
+            out.println("\n  ],");
+            out.println("  \"indirect_jumps\": [");
+            first = true;
+            Set<String> requestedFunctions = new HashSet<>();
+            for (String value : requested) {
+                Function function = currentProgram.getFunctionManager().getFunctionContaining(toAddr(value));
+                if (function == null || !requestedFunctions.add(hex(function.getEntryPoint()))) continue;
+                InstructionIterator instructions = currentProgram.getListing().getInstructions(function.getBody(), true);
+                while (instructions.hasNext()) {
+                    Instruction item = instructions.next();
+                    if (!item.getFlowType().isComputed()) continue;
+                    if (!first) out.println(",");
+                    first = false;
+                    out.print("    {\"function\":" + quote(function.getName()) +
+                        ",\"function_entry\":" + quote(hex(function.getEntryPoint())) +
+                        ",\"address\":" + quote(hex(item.getAddress())) +
+                        ",\"text\":" + quote(item.toString()) + "}");
+                }
+            }
+            out.println("\n  ],");
+            out.println("  \"decompiler\": [");
+            first = true;
+            requestedFunctions.clear();
+            DecompInterface decompiler = new DecompInterface();
+            decompiler.openProgram(currentProgram);
+            for (String value : requested) {
+                Function function = currentProgram.getFunctionManager().getFunctionContaining(toAddr(value));
+                if (function == null || !requestedFunctions.add(hex(function.getEntryPoint()))) continue;
+                DecompileResults result = decompiler.decompileFunction(function, 30, monitor);
+                String code = result.decompileCompleted() && result.getDecompiledFunction() != null
+                    ? result.getDecompiledFunction().getC() : "";
+                if (!first) out.println(",");
+                first = false;
+                out.print("    {\"function\":" + quote(function.getName()) +
+                    ",\"entry\":" + quote(hex(function.getEntryPoint())) +
+                    ",\"file_offset\":" + quote(fileOffset(function.getEntryPoint(), payload, sourceFileOffset)) +
+                    ",\"completed\":" + result.decompileCompleted() +
+                    ",\"c\":" + quote(code) + "}");
+            }
+            decompiler.dispose();
             out.println("\n  ]");
             out.println("}");
         }

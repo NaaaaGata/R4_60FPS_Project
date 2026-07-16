@@ -22,7 +22,9 @@ def test_real_codex_is_disabled_and_uses_schema_read_only_args(tmp_path: Path) -
     client = CodexExecClient(Path("codex"), tmp_path / "schema.json", tmp_path, enabled=False)
     arguments = client.build_args(tmp_path / "out.json", "prompt")
     assert arguments[:3] == ["codex", "exec", "--ephemeral"]
+    assert "--ignore-user-config" in arguments
     assert arguments[arguments.index("--sandbox") + 1] == "read-only"
+    assert 'web_search="disabled"' in arguments
     assert "--output-schema" in arguments
     with pytest.raises(RuntimeError, match="explicit"):
         client.propose(context())

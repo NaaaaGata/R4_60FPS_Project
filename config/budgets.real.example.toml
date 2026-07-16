@@ -1,0 +1,13 @@
+[campaign]
+# Real Codex proposal generation is deliberately limited to one read-only,
+# schema-constrained call until an evidence-reviewed change catalog exists.
+max_experiments = 1
+max_seconds = 300
+max_codex_calls = 1
+max_consecutive_crashes = 1
+max_consecutive_no_progress = 1
+max_storage_bytes = 10485760
+max_vblanks_per_experiment = 120
+max_changes_per_experiment = 1
+max_retries_per_candidate = 1
+max_cost = 1.0

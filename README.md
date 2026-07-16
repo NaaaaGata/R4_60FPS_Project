@@ -5,7 +5,7 @@ The current-environment acceptance matrix and external blockers are in [docs/FIN
 
 R4 AutoLab is a reproducible, safety-first experiment supervisor for researching the PlayStation game *R4 -RIDGE RACER TYPE 4-*. Its purpose is to measure the relationship between VBlank, rendering, physics, AI, timers, and buffers before any 60 fps patch is attempted.
 
-The current MVP provides a complete asset-free fake experiment path: configuration, environment diagnosis, input hashing/header inspection, SQLite lifecycle history, JSONL telemetry, checked RAM patching and restoration, baseline/candidate evaluation, reporting, and a versioned Lua/JSONL bridge boundary. It does **not** yet claim a working PCSX-Redux integration or a real-game 60 fps patch.
+The current MVP provides an asset-free fake experiment path plus a verified PCSX-Redux bridge: configuration, diagnostics, input/disc identity inspection, SQLite lifecycle history, JSONL telemetry, checked RAM patching and restoration, baseline/candidate evaluation, reporting, localhost Lua/JSONL IPC, raw screenshots, and raw save-state capture/reload. It does **not** claim a real-game 60 fps patch.
 
 ## Five-minute fake demo
 
@@ -37,6 +37,14 @@ r4-autolab visual-check --raw screenshot.raw --metadata screenshot.json
 r4-autolab init-config
 r4-autolab inspect-input /path/to/owned/file
 r4-autolab inspect-disc --cue /path/to/owned/disc.cue --extract-directory private/extracted
+r4-autolab capture-manual-state --name race-straight
+r4-autolab replay-input --attempts 3 --sample-every 60
+r4-autolab trace-race --vblanks 600 --breakpoint-vblanks 120 --max-hits 32
+r4-autolab trace-functions --address 0x80038338 --vblanks 600 --max-hits 512
+r4-autolab trace-addresses --watch player_x:0x800ABCF0:4 --vblanks 600
+r4-autolab probe-overlay --address 0x80114780 --size 64
+r4-autolab render-cadence --vblanks 120
+r4-autolab audit-scratch --address 0x1F8003FC --timeout 60
 r4-autolab r4-observe --cue /path/to/owned/disc.cue --vblanks 600
 r4-autolab baseline --scenario fake-straight
 r4-autolab experiment --proposal config/fake_candidate.example.json
@@ -45,6 +53,7 @@ r4-autolab trace-summary <run-id>
 r4-autolab report <run-id>
 r4-autolab campaign --config config/budgets.example.toml
 r4-autolab campaign --config config/budgets.example.toml --execute --fake-codex
+r4-autolab campaign --config config/budgets.real.example.toml --execute --real-codex
 r4-autolab stop
 ```
 
@@ -54,12 +63,13 @@ Use `--config /path/to/project.toml` before the subcommand to select another pro
 
 Never commit a disc image, BIOS, executable, save state, or raw capture. Store them in ignored directories (`private/`, `input/`, `states/`, or `captures/raw/`) or outside the repository. `inspect-input` emits only filename, size, SHA-256, format, and direct PS-X EXE header metadata; it does not dump content.
 
-The read-only PCSX-Redux capability bridge is available, while general real experiments remain fail-closed. See [PCSX-Redux compatibility](docs/PCSX_REDUX_COMPATIBILITY.md), [setup](docs/SETUP.md), [experiment protocol](docs/EXPERIMENT_PROTOCOL.md), and [safety policy](docs/SAFETY.md).
+The manual capture command auto-detects a verified private R4 Japanese CUE, starts PCSX-Redux without test mode, and waits for one Enter press before pausing and saving ignored raw artifacts. It then performs three fresh-process reload checks and updates only ignored `config/project.toml`. See [manual state capture](docs/MANUAL_STATE_CAPTURE.md), [PCSX-Redux compatibility](docs/PCSX_REDUX_COMPATIBILITY.md), [setup](docs/SETUP.md), [experiment protocol](docs/EXPERIMENT_PROTOCOL.md), and [safety policy](docs/SAFETY.md).
+
+`audit-scratch` is read-only. The separate `pcsx-capabilities --allow-scratch-write --scratch-address ...` path must remain explicitly gated and may be used only after an audit; see [scratchpad safety audit](docs/SCRATCH_AUDIT.md).
 
 ## Current limitations
 
 - Phase 3A is verified against the local arm64 PCSX-Redux build documented in `docs/PCSX_REDUX_COMPATIBILITY.md`; other builds may differ.
-- Campaign execution/Codex candidate generation is intentionally disabled; campaign budget validation is dry-run only.
-- Ghidra headless export, visual corruption heuristics, GPU/VRAM capture, and save-state/input replay are not connected.
-- Disc images are hashed but their embedded `PS-X EXE` is not extracted by the MVP.
-- No real R4 addresses or executable identity are confirmed yet.
+- Real Codex proposal-only execution is explicitly available with a non-zero finite budget and an empty evidence catalog; it cannot launch a RAM experiment until a reviewed candidate exists.
+- Official Ghidra 12.1.2 base/overlay export and deterministic controller replay are connected; a raw screenshot-hash fallback confirms 29.97 Hz displayed-image cadence, while GPU command hashing remains unavailable.
+- The R4 Japanese disc identity, active race overlay, player structure, and integrated 30 Hz race loop are confirmed for one captured race state. No evidence-backed render-only 60 fps patch exists yet.

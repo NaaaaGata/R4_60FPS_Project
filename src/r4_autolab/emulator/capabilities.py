@@ -111,11 +111,15 @@ class CapabilityRunner:
         original = self.adapter.read_memory(address, width)
         replacement = bytes(byte ^ 0xA5 for byte in original)
         restored = False
+        observed: bytes | None = None
+        verification_error: Exception | None = None
         try:
             self.adapter.write_memory(address, replacement)
             observed = self.adapter.read_memory(address, width)
             if observed != replacement:
                 raise RuntimeError("scratch write read-back mismatch")
+        except Exception as error:
+            verification_error = error
         finally:
             try:
                 self.adapter.write_memory(address, original)
@@ -123,7 +127,17 @@ class CapabilityRunner:
             except Exception:
                 restored = False
         if not restored:
-            raise RuntimeError("scratch bytes could not be verified after restoration")
+            raise RuntimeError(
+                "scratch bytes could not be verified after restoration; "
+                f"original={original.hex()} replacement={replacement.hex()} "
+                f"observed={observed.hex() if observed is not None else 'unavailable'}"
+            )
+        if verification_error is not None:
+            raise RuntimeError(
+                f"{verification_error}; original={original.hex()} replacement={replacement.hex()} "
+                f"observed={observed.hex() if observed is not None else 'unavailable'} "
+                "restore_verified=true"
+            ) from verification_error
         return f"restored 4 bytes at operator-confirmed scratch address 0x{address:08X}"
 
     def run(self) -> CapabilityReport:

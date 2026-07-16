@@ -1,0 +1,30 @@
+{
+  "protocol_version": 1,
+  "scenarios": [
+    {
+      "name": "neutral-120",
+      "vblanks": 120,
+      "buttons": []
+    },
+    {
+      "name": "accelerate-straight-600",
+      "vblanks": 600,
+      "buttons": ["CROSS"]
+    },
+    {
+      "name": "steer-left-300",
+      "vblanks": 300,
+      "buttons": ["LEFT"]
+    },
+    {
+      "name": "steer-right-300",
+      "vblanks": 300,
+      "buttons": ["RIGHT"]
+    },
+    {
+      "name": "accelerate-and-steer-600",
+      "vblanks": 600,
+      "buttons": ["CROSS", "LEFT"]
+    }
+  ]
+}

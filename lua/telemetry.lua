@@ -12,6 +12,7 @@ function Telemetry.vblank(index, host)
         ra = registers.ra,
         sp = registers.sp,
         gprs = registers.gprs,
+        cpu_cycles = host:get_cpu_cycles(),
         watch_values = host:sample_watches(),
         display_buffer = host:display_buffer(),
         gpu_hash = host:gpu_hash(),
@@ -21,4 +22,3 @@ function Telemetry.vblank(index, host)
 end
 
 return Telemetry
-

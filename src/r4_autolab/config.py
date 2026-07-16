@@ -23,6 +23,7 @@ class ProjectConfig:
     bios_path: Path | None
     disc_path: Path | None
     scratch_address: int | None
+    ghidra_headless: Path | None
 
 
 def _resolve(root: Path, value: str) -> Path:
@@ -38,6 +39,7 @@ def load_project_config(path: Path) -> ProjectConfig:
     target = data.get("target", {})
     experiment = data.get("experiment", {})
     emulator = data.get("emulator", {})
+    tools = data.get("tools", {})
     mode = str(project.get("mode", "fake"))
     if mode not in {"fake", "real"}:
         raise ValueError("project.mode must be 'fake' or 'real'")
@@ -50,6 +52,7 @@ def load_project_config(path: Path) -> ProjectConfig:
     bios_value = str(target.get("bios_path", ""))
     disc_value = str(target.get("disc_path", ""))
     raw_scratch = emulator.get("scratch_address")
+    ghidra_value = str(tools.get("ghidra_headless", ""))
     scratch_address = (
         int(raw_scratch, 0) if isinstance(raw_scratch, str) else int(raw_scratch)
     ) if raw_scratch is not None and raw_scratch != "" else None
@@ -69,4 +72,5 @@ def load_project_config(path: Path) -> ProjectConfig:
         bios_path=_resolve(root, bios_value) if bios_value else None,
         disc_path=_resolve(root, disc_value) if disc_value else None,
         scratch_address=scratch_address,
+        ghidra_headless=_resolve(root, ghidra_value) if ghidra_value else None,
     )

@@ -11,12 +11,19 @@
 | Phase 2: Reproducible supervisor | COMPLETE (MVP scope) | State transitions, artifacts, restore paths, comparisons |
 | Phase 3A: PCSX-Redux minimum capabilities | COMPLETE | Real arm64 bridge capability report; read-only checks passed |
 | Phase 3B: PCSX-Redux remaining bridge | COMPLETE | Extended real smoke: breakpoint lifecycle and raw-state roundtrip passed |
-| Phase 4: Static analysis bridge | COMPLETE WITH REAL-SMOKE BLOCKER | Headless runner/cache/export script/fake tests complete; Ghidra absent |
+| Phase 4: Static analysis bridge | COMPLETE WITH REAL SMOKE | Official Ghidra 12.1.2, verified PS-X payload mapping, selected dynamic-PC export |
 | Phase 5: Automated evaluation | COMPLETE FOR CONFIGURED TELEMETRY | Cadence, trajectories, thresholds, stability, raw visual checks |
-| Phase 6: Codex research loop | COMPLETE IN FAKE/DRY MODE | Schema-gated adapter, budgets, SQLite resume, fake campaign |
-| Phase 7: First R4 investigation | COMPLETE FOR BOOT / BLOCKED FOR RACE | Target identity and bounded Read/Write boot trace complete; race state/input absent |
+| Phase 6: Codex research loop | COMPLETE WITH REAL PROPOSAL SMOKE | Signed CLI, strict schema, one-call finite budget, zero-emulator evidence gate |
+| Phase 7: First R4 investigation | COMPLETE FOR FIRST RACE TIMING MODEL | Deterministic race, overlay mapping, real vehicle fields, 30 Hz subsystem and display cadence |
+| Race-state capture | COMPLETE | One-Enter raw capture and three-process deterministic reload PASS |
+| Deterministic input | COMPLETE | Official Lua Pad override; five scenarios × three attempts PASS |
+| Deterministic race trace | COMPLETE FOR PUBLISHED CANDIDATES | 600 VBlanks; bounded ordered Read/Write phases; public vehicle addresses disproven |
+| Real static correlation | COMPLETE FOR BASE + RACE OVERLAY | Stack false-positive rejection plus active overlay and object/function mapping |
+| Race timing model | COMPLETE FOR ONE STATE | Physics/AI dispatcher, camera, timer, main loop, and raw displayed image all 30 Hz |
+| Scratch restoration gate | COMPLETE FOR ONE NON-CODE WORD | Five scenarios / 1,920 VBlanks unaccessed; paused write/read/restore PASS |
+| 60 fps candidate gate | COMPLETE: NO SAFE CHANGE | Integrated 30 Hz loop; zero R4 patches; real Codex returned no change |
 
-Overall implementation status: **CURRENT-ENVIRONMENT COMPLETE; EXTERNAL RACE EVIDENCE BLOCKED**.
+Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; SAFE PATCH EVIDENCE NOT YET ESTABLISHED**.
 
 ## Section 1 — Baseline audit (Phase 0 through Phase 3A)
 
@@ -72,6 +79,8 @@ Date: 2026-07-17 JST
 
 Date: 2026-07-17 JST
 
+Historical snapshot: the blocker below was true at Section 3 and was resolved in Section 12.
+
 ### Implemented
 
 - Official `analyzeHeadless` discovery, argument-array builder, timeout, isolated temporary project, logs, and content-addressed cache.
@@ -119,6 +128,8 @@ Date: 2026-07-17 JST
 
 Date: 2026-07-17 JST
 
+Historical snapshot: real execution was disabled at this stage and was enabled safely in Section 15.
+
 ### Implemented
 
 - Exchangeable `CodexClient`, deterministic Fake client, and explicitly disabled real `codex exec` client.
@@ -142,6 +153,8 @@ Date: 2026-07-17 JST
 ## Section 6 — Phase 7 first R4 investigation
 
 Date: 2026-07-17 JST
+
+Historical snapshot: these boot-only blockers were resolved by Sections 9–13.
 
 ### Confirmed target
 
@@ -180,3 +193,188 @@ Date: 2026-07-17 JST
 - First owned-disc identity and bounded boot Read/Write observation: complete.
 - Final requirement matrix and exact resume conditions: `docs/FINAL_AUDIT.md`.
 - No 60 fps patch or success claim was produced.
+
+## Section 8 — Interactive race-state capture implementation
+
+Date: 2026-07-17 JST
+
+### Implemented
+
+- Added `capture-manual-state` with automatic verified CUE/BIN and BIOS/OpenBIOS discovery.
+- Normal interactive PCSX launch excludes `-testmode` while retaining the authenticated Lua bridge, interpreter, and debugger.
+- The manual prompt is shown only after handshake and a sampled PC enters the verified R4 payload.
+- Enter triggers pause-first register/counter/watch capture, raw screenshot, raw-protobuf state creation, source/state hashing, and same-process reload.
+- Default cleanup launches three independent state-validation processes and records initial plus 60-VBlank evidence.
+- Local real-mode paths and the state are written only to ignored `config/project.toml`; generated artifacts remain under ignored `states/` and `runs/`.
+
+### Verification before real capture
+
+- `pytest`: 45 passed.
+- `mypy src`: success for 29 source files.
+- `git check-ignore`: state, raw screenshot, validation report, local config, CUE, and BIN all matched explicit ignore rules.
+- Real extended PCSX capability smoke remains PASS, including raw-state roundtrip and breakpoint lifecycle.
+
+### Transition result
+
+The one-time manual navigation and Enter capture completed successfully. Section 9 records the resulting state and reproducibility evidence.
+
+## Section 9 — Real race-state capture and validation
+
+Date: 2026-07-17 JST
+
+### Captured evidence
+
+- Ignored state: `states/manual-race-20260716T171240718201Z/race_straight.rawstate`.
+- State SHA-256: `a80f4a2c1dead74c41e309fe0762b397e635e390ba46ce8251f016b3c595c1e7`.
+- Size: 19,063,530 bytes; source CUE/BIN hashes remained unchanged.
+- Raw screenshot is valid 320×240×16-bpp and visibly shows an active race straight at approximately 95 km/h.
+- Local `config/project.toml` now selects real mode, the verified disc/state, scenario `race-straight`, and 120 VBlanks. It remains ignored.
+
+### Three-process reproducibility
+
+- Three fresh PCSX-Redux processes loaded the raw state successfully and shut down without residue.
+- Initial candidate bytes, 60-VBlank candidate trajectories, initial screenshot hash, and final screenshot hash matched across all attempts.
+- Pause sampling consistently caught the PS1 general exception vector `PC=0x80000080` with target return `RA=0x8008AFCC`; the validator now recognizes this standard interrupt context instead of requiring PC alone to be inside the payload.
+- Final validation classification: **PASS**.
+- Public-address candidates except `0x801FFF58` remained zero despite the visible race, so their Japanese-version semantics are not assumed and must be rediscovered from trace evidence.
+
+### Verification
+
+- `pytest`: 46 passed.
+- `mypy src`: success for 29 source files.
+- No R4 memory write or patch was performed.
+
+## Section 10 — Deterministic input replay
+
+Date: 2026-07-17 JST
+
+### Implementation
+
+- Added official PCSX-Redux Pad override operations for controller 1, with a strict 16-button allowlist and contradictory-direction rejection.
+- Added VBlank-bounded replay, per-scenario canonical SHA-256, 60-VBlank candidate/screenshot sampling, and fresh-process attempts.
+- Input is released after each run, on Python exceptions, before bridge shutdown, and on the Lua `Quitting` event.
+- Added the required neutral, acceleration, left, right, and acceleration-plus-steering scenarios.
+
+### Real verification
+
+- Five scenarios × three attempts: **PASS**.
+- Every scenario had identical complete candidate/screenshot trajectories across all three attempts.
+- Every scenario changed the visible screen and acknowledged final input release.
+- Left, right, and acceleration-plus-left produced distinct final screen hashes; the camera candidate moved in opposite directions for left/right.
+- No PCSX-Redux child remained and no game memory write or patch occurred.
+
+### Input identities
+
+- `neutral-120`: `72917ed36ba5cc81c29f2b5e82645f4cd33fd2229b68305be0e62e320c3ee6d8`
+- `accelerate-straight-600`: `53632bf889065e6aea47f6ab054ba1910ae7f5df3c59579744e414ebcf02429a`
+- `steer-left-300`: `cc80765cf7e03e2705273c4fbd29a0568f1f9e57fd78a489f7312b5c3879c387`
+- `steer-right-300`: `cc549a7914be79870911596997eb5b140e78fe52f6b1a154abf1ce70d6ebee06`
+- `accelerate-and-steer-600`: `d4654a9d48923549cac753a435e6f1793face25d122c91f1a85f793245fb1040`
+
+## Section 11 — Bounded deterministic race trace
+
+Date: 2026-07-17 JST
+
+### Execution
+
+- Collected exactly 600 race VBlanks with deterministic acceleration and all eight configured watches.
+- Ran ordered Write phases for frame, XYZ, speed, RPM, heading, and camera candidates, then Read phases for XYZ and camera.
+- Every breakpoint was limited to 32 hits and every phase reloaded the verified state before 120 VBlanks.
+- Events include VBlank, CPU cycle, PC/RA/SP/GPR, access/cause, scenario, state hash, and input hash.
+
+### Evidence
+
+- Frame/XYZ/heading/speed/RPM published candidates: constant zero, zero bounded accesses.
+- `0x801FFF58`: 299 changes over 600 samples, approximately 29.985 Hz, with capped 32 Write and 32 Read events.
+- `0x801FFF58` lies 0x38 bytes below captured SP and has many unrelated source PCs; its public camera label is rejected pending stronger mapping.
+- PASS: all phases completed, cleanup succeeded, 600 telemetry and 64 bounded breakpoint events retained locally.
+- No candidate address write, RAM patch, large dump, or unbounded exploration occurred.
+
+## Section 12 — Official Ghidra installation and real export
+
+Date: 2026-07-17 JST
+
+### Environment
+
+- Official Ghidra 12.1.2 asset from NSA GitHub Releases, installed without administrator privileges under ignored `private/tools/ghidra/`.
+- ZIP SHA-256 matched official digest `b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d`.
+- OpenJDK 21.0.11; doctor now detects the locally configured `analyzeHeadless`.
+
+### Verified import and export
+
+- Raw BinaryLoader mapped exactly the 638,976-byte payload from file offset `0x800` to `0x80010000–0x800ABFFF` as MIPS little-endian.
+- Verified entry point `0x8007D4B4` was established before analysis.
+- Real export: 1,456 functions, 16,979 basic blocks, 3,034 call edges, 251 strings, and three selected decompilations.
+- Export includes function ranges/file offsets, xrefs, surrounding MIPS with delay slots, computed jumps, memory blocks, and pseudocode.
+
+### Dynamic/static conclusion
+
+- `0x80050194` / `0x800501B0`: save/restore `ra` at `0x10(sp)` in `FUN_80050168`.
+- `0x80084C28` / `0x80084D2C`: save/restore `s4` at `0x20(sp)` in `FUN_80084c10`.
+- These instructions explain the apparent `0x801FFF58` camera events as stack reuse. The public camera hypothesis is rejected for this build.
+- Ghidra's function signatures and pseudocode remain hypotheses and are not treated as ground truth.
+
+## Section 13 — Race overlay, real state fields, and timing model
+
+Date: 2026-07-17 JST
+
+### Overlay and object discovery
+
+- Runtime fingerprinting located two owned-disc overlay regions separated by `0x46000`; private bounded extracts remain ignored.
+- Ghidra mapped the active overlay at `0x801146F0`, with race entry `0x80114780`, 504 function candidates, and 494 call edges.
+- The overlay identifies `0x800FFA00 -> 0x800ABCE0` as the player object. Targeted reads confirmed moving position, orientation, speed, rank, lap, and progress fields without scanning RAM.
+
+### Dynamic timing evidence
+
+- Main-loop landmarks and race overlay entry: exactly 300 hits / 600 VBlanks.
+- Vehicle/AI dispatcher `0x80038338`, camera `0x80034178`, lap/timer `0x8003C838`, and frame post-processing `0x8004AA7C`: exactly one hit on each active 30 Hz frame.
+- Player X/Z: 299 changes / 600 at 30.013 Hz; speed-related field changed 267 times.
+- 121 consecutive raw screenshots produced 60 transitions; after the initial sample, every hash repeats for exactly two VBlanks. Displayed-image cadence is 29.97 Hz with 50% duplicate transitions.
+- No memory write, patch, NOP, disc/BIOS modification, or unbounded dump occurred. No PCSX process remained.
+- A host-level nonblocking lock now rejects a second concurrent AutoLab PCSX launch, preventing accidental doubled audio/processes.
+
+### Gate decision
+
+The race update, physics/AI, camera, timer, HUD/render work, and displayed image are currently coupled at 30 Hz. Doubling the integrated loop is unsafe and no isolated render-only candidate is yet supported. Patch generation therefore remains disabled. Full evidence is in `docs/R4_TIMING_MODEL.md`.
+
+## Section 14 — Scratchpad read-only audit and restoration proof
+
+Date: 2026-07-17 JST
+
+- Added `audit-scratch`, restricted to one aligned word inside the PS1 scratchpad and using bounded Read/Write breakpoints.
+- `0x1F8003FC` remained `00000000` with zero accesses across all five deterministic scenarios and 1,920 total VBlanks; the test was repeated after the memory backend correction.
+- The first explicit write test failed read-back using `getMemoryAsFile().writeAt`, then ran restoration, shutdown, and cleanup. No alternate game address was tried.
+- Official `PCSX.getScratchPtr()` is now used only for fully range-checked scratchpad requests. All other memory retains the safer File API.
+- The corrected paused test verified `00000000 -> a5a5a5a5 -> 00000000`; scratch write, restoration, shutdown, and child cleanup all PASS.
+- No R4 candidate address, game code, disc image, BIOS, or save-state content was modified. This proves bridge restoration only, not a patch candidate.
+
+## Section 15 — Evidence-gated candidate and real Codex campaign
+
+Date: 2026-07-17 JST
+
+- Strict Structured Outputs schema now requires every declared property, rejects undeclared fields, and gives predicted effects a fixed nullable shape.
+- Real Codex discovery records executable identity and requires strict macOS code-signature verification before invocation.
+- Added `config/budgets.real.example.toml`: one call, one proposal, 300 seconds, one change maximum, and non-zero finite accounting budget.
+- Real invocation is ephemeral, read-only, ignores user configuration, disables web search, and writes only ignored campaign artifacts.
+- Supervisor-side evidence catalog contains zero reviewed changes. Any write proposal is rejected before emulator launch; no-change stops cleanly.
+- One real signed Codex 0.144.5 call completed in 7.74 seconds and returned `changes=[]`, classified `NO_SAFE_CHANGE`; emulator experiments and R4 writes remained zero.
+- A final bounded GPU-function trace confirmed submit calls only on 60 of 120 VBlanks: `0x8009331C` and `0x80093150` once per active frame, `0x800930E0` twice per active frame.
+- Two prior strict-schema errors are retained as FAILED SQLite campaigns with exact logs and zero emulator experiments.
+- Phase L/M patch execution is SKIP by evidence gate, not incomplete automation. Detailed accounting is in `docs/R4_CANDIDATE_RESULTS.md`.
+
+### macOS blocked legacy CLI
+
+An attempted version check touched stale Homebrew Cask Codex 0.125.0. macOS correctly blocked it because its signature was invalid and moved it to Trash. No bypass was used. The active VS Code extension ships separate Codex 0.144.5; its on-disk signature and designated requirement passed before the real campaign. The blocked legacy binary was never used for a campaign.
+
+## Section 16 — Final acceptance and delivery
+
+Date: 2026-07-17 JST
+
+- `pytest`: 67 passed.
+- `mypy src`: success for 36 source files.
+- `doctor`: Python, Git, current Codex, PCSX-Redux, Ghidra, and Java detected.
+- Final extended PCSX smoke: launch, IPC, handshake, pause/resume, VBlank, counters, registers, memory read, screenshot, breakpoint lifecycle, raw-state roundtrip, shutdown, and process cleanup all PASS.
+- Real campaign budget dry-run PASS; real one-call proposal campaign completed `NO_SAFE_CHANGE` with zero emulator experiments.
+- Tracked-file audit found no state, run, private asset, BIN, CUE, extracted executable, or raw capture.
+- `git diff --check`: clean. `.metals/` and `.vscode/` remain unrelated untracked IDE directories and are excluded.
+- Final matrix, exact unresolved items, and reproduction commands are in `docs/FINAL_AUDIT.md`.

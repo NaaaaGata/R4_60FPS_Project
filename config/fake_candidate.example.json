@@ -19,9 +19,9 @@
   "predicted_effects": {
     "render_hz": 60,
     "physics_hz": 30,
-    "game_speed_ratio": 1.0
+    "game_speed_ratio": 1.0,
+    "notes": "deterministic fake adapter only"
   },
   "stop_conditions": ["crash", "restoration-failure"],
   "evaluation_profile": "default"
 }
-

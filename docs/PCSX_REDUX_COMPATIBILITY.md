@@ -81,6 +81,8 @@ All failed runs shut down the child process and recorded exact logs. `runs/` rem
 
 - No breakpoint was installed against game or BIOS code; only API availability and the required interpreter/debugger mode were verified.
 - No save state was loaded.
-- No scratch write was attempted.
+- The initial optional scratch write was skipped until a separate 1,920-VBlank race audit established a narrowly eligible location.
+
+The installed build's `getMemoryAsFile().writeAt()` acknowledged a scratchpad write but did not change bytes at `0x1F8003FC`. The bridge therefore uses the separately documented `PCSX.getScratchPtr()` only for fully range-checked accesses inside the 1 KiB scratchpad; all other reads/writes retain `getMemoryAsFile()`. See the official [memory and registers API](https://pcsx-redux.consoledev.net/Lua/memory-and-registers/) and [File API](https://pcsx-redux.consoledev.net/Lua/file-api/). The failed capability report is retained locally, including successful restoration and shutdown paths; the corrected retry passed write/read/restore and process cleanup. Details are in [SCRATCH_AUDIT.md](SCRATCH_AUDIT.md).
 - No private BIOS, R4 image, R4 address, patch, Ghidra analysis, or automated campaign was used.
 - VRAM capture, GPU command logging, PNG conversion, reconnection, and compressed save-state conversion remain outside this phase.

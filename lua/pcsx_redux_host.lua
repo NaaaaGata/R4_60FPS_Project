@@ -4,6 +4,14 @@ Host.__index = Host
 local MAX_MESSAGE_BYTES = 1024 * 1024
 local MAX_MEMORY_BYTES = 65536
 local ADDRESS_SPACE_SIZE = 0x100000000
+local SCRATCH_START = 0x1f800000
+local SCRATCH_END = 0x1f800400
+local PAD_BUTTON_NAMES = {
+    UP = true, DOWN = true, LEFT = true, RIGHT = true,
+    CROSS = true, CIRCLE = true, SQUARE = true, TRIANGLE = true,
+    L1 = true, L2 = true, L3 = true, R1 = true, R2 = true, R3 = true,
+    START = true, SELECT = true,
+}
 
 local function integer(value, name)
     assert(type(value) == 'number' and value >= 0 and value % 1 == 0, name .. ' must be a non-negative integer')
@@ -64,6 +72,7 @@ function Host.new(json, base64)
         event_sender = nil,
         vblank_target = nil,
         watches = {},
+        pad_overrides = {},
     }, Host)
     return self
 end
@@ -186,7 +195,10 @@ function Host:on_vblank(callback)
 end
 
 function Host:install_quitting_listener()
-    local listener = PCSX.Events.createEventListener('Quitting', function() self:_close_socket() end)
+    local listener = PCSX.Events.createEventListener('Quitting', function()
+        pcall(function() self:clear_pad_overrides() end)
+        self:_close_socket()
+    end)
     self.listeners[#self.listeners + 1] = listener
 end
 
@@ -209,9 +221,17 @@ function Host:display_buffer() return -1 end
 function Host:gpu_hash() return 'unavailable-phase-3a' end
 function Host:dropped_event_count() return self.dropped end
 function Host:get_registers() return register_snapshot() end
+function Host:get_cpu_cycles() return tonumber(PCSX.getCPUCycles()) end
 
 function Host:read_memory(address, size)
     address, size = safe_memory_range(address, size)
+    if address >= SCRATCH_START and address + size <= SCRATCH_END then
+        local scratch = PCSX.getScratchPtr()
+        local result = {}
+        local offset = address - SCRATCH_START
+        for index = 0, size - 1 do result[#result + 1] = string.char(tonumber(scratch[offset + index])) end
+        return table.concat(result)
+    end
     local buffer = self.memory:readAt(size, address)
     local data = tostring(buffer)
     assert(#data == size, 'short memory read')
@@ -235,6 +255,12 @@ end
 function Host:write_memory(address, data)
     assert(type(data) == 'string', 'memory data must be a byte string')
     address = safe_memory_range(address, #data)
+    if address >= SCRATCH_START and address + #data <= SCRATCH_END then
+        local scratch = PCSX.getScratchPtr()
+        local offset = address - SCRATCH_START
+        for index = 1, #data do scratch[offset + index - 1] = data:byte(index) end
+        return
+    end
     local written = self.memory:writeAt(data, address)
     assert(tonumber(written) == #data, 'short memory write')
 end
@@ -255,11 +281,15 @@ function Host:set_breakpoint(specification)
         hit_count = hit_count + 1
         local ok, message = pcall(function()
             local snapshot = register_snapshot()
+            local hit_vblank = self.vblank_count
+            local hit_cycles = self:get_cpu_cycles()
             PCSX.nextTick(function()
                 self:_emit({
                     kind = 'event', event = 'breakpoint', breakpoint_id = identifier,
                     access = specification.access,
                     pc = snapshot.pc, ra = snapshot.ra, sp = snapshot.sp,
+                    gprs = snapshot.gprs, vblank_index = hit_vblank,
+                    cpu_cycles = hit_cycles,
                     accessed_address = tonumber(actual_address), access_width = tonumber(actual_width), cause = tostring(cause),
                 })
             end)
@@ -276,6 +306,50 @@ function Host:clear_breakpoint(identifier)
     assert(breakpoint, 'unknown breakpoint id')
     breakpoint:remove()
     self.breakpoints[identifier] = nil
+end
+
+function Host:_primary_pad()
+    assert(PCSX.SIO0 and PCSX.SIO0.slots and PCSX.SIO0.slots[1], 'SIO0 slot 1 is unavailable')
+    local pad = PCSX.SIO0.slots[1].pads and PCSX.SIO0.slots[1].pads[1]
+    assert(pad, 'SIO0 slot 1 pad 1 is unavailable')
+    return pad
+end
+
+function Host:clear_pad_overrides()
+    local pad = self:_primary_pad()
+    local cleared = 0
+    for name, _ in pairs(self.pad_overrides) do
+        local button = PCSX.CONSTS.PAD.BUTTON[name]
+        assert(button ~= nil, 'PCSX pad constant disappeared: ' .. tostring(name))
+        pad.clearOverride(button)
+        cleared = cleared + 1
+    end
+    self.pad_overrides = {}
+    return cleared
+end
+
+function Host:set_pad_buttons(buttons)
+    assert(type(buttons) == 'table' and #buttons <= 16, 'pad buttons must be an array of at most 16 names')
+    local requested = {}
+    for _, name in ipairs(buttons) do
+        assert(type(name) == 'string' and PAD_BUTTON_NAMES[name], 'unsupported pad button: ' .. tostring(name))
+        assert(not requested[name], 'duplicate pad button: ' .. name)
+        requested[name] = true
+    end
+    assert(not (requested.LEFT and requested.RIGHT), 'LEFT and RIGHT cannot be overridden together')
+    assert(not (requested.UP and requested.DOWN), 'UP and DOWN cannot be overridden together')
+    self:clear_pad_overrides()
+    local pad = self:_primary_pad()
+    for name, _ in pairs(requested) do
+        local button = PCSX.CONSTS.PAD.BUTTON[name]
+        assert(button ~= nil, 'PCSX pad constant is unavailable: ' .. name)
+        pad.setOverride(button)
+    end
+    self.pad_overrides = requested
+    local active = {}
+    for name, _ in pairs(requested) do active[#active + 1] = name end
+    table.sort(active)
+    return active
 end
 
 function Host:_safe_output_path(path)
@@ -332,8 +406,8 @@ function Host:dispatch(operation, payload)
         }
     elseif operation == 'pause' then PCSX.pauseEmulator(); return { paused = true }
     elseif operation == 'resume' then PCSX.resumeEmulator(); return { resumed = true }
-    elseif operation == 'shutdown' then PCSX.quit(0); return { shutting_down = true }
-    elseif operation == 'get_cpu_cycles' then return { cycles = tonumber(PCSX.getCPUCycles()) }
+    elseif operation == 'shutdown' then self:clear_pad_overrides(); PCSX.quit(0); return { shutting_down = true }
+    elseif operation == 'get_cpu_cycles' then return { cycles = self:get_cpu_cycles() }
     elseif operation == 'get_vblank_count' then return { count = self.vblank_count }
     elseif operation == 'run_vblanks' then
         local count = integer(payload.count, 'VBlank count')
@@ -342,6 +416,8 @@ function Host:dispatch(operation, payload)
         PCSX.resumeEmulator()
         return { target = self.vblank_target }
     elseif operation == 'get_registers' then return register_snapshot()
+    elseif operation == 'set_pad_buttons' then return { buttons = self:set_pad_buttons(payload.buttons) }
+    elseif operation == 'clear_pad_buttons' then return { cleared = self:clear_pad_overrides() }
     elseif operation == 'configure_watches' then
         assert(type(payload.watches) == 'table' and #payload.watches <= 64, 'invalid watch list')
         self.watches = {}
