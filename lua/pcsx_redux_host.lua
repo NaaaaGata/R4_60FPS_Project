@@ -288,6 +288,20 @@ function Host:load_state(path, format)
     state:close()
 end
 
+function Host:create_save_state(path, format)
+    assert(format == 'raw-protobuf', 'only uncompressed raw-protobuf save states are supported')
+    path = self:_safe_output_path(path)
+    assert(path:lower():match('%.rawstate$'), 'raw save states must use the .rawstate extension')
+    local state = PCSX.createSaveState()
+    local size = tonumber(state.size)
+    assert(size > 0, 'empty save state')
+    local output = Support.File.open(path, 'TRUNCATE')
+    assert(output and not output:failed(), 'unable to open raw save-state output')
+    output:writeMoveSlice(state)
+    output:close()
+    return { path = path, format = format, size = size }
+end
+
 function Host:dispatch(operation, payload)
     if operation == 'handshake' then
         assert(type(self.expected_token) == 'string' and payload.session_token == self.expected_token, 'session token mismatch')
@@ -314,6 +328,7 @@ function Host:dispatch(operation, payload)
     elseif operation == 'set_breakpoint' then return { breakpoint_id = self:set_breakpoint(payload) }
     elseif operation == 'clear_breakpoint' then self:clear_breakpoint(payload.breakpoint_id); return { removed = true }
     elseif operation == 'load_state' then self:load_state(payload.path, payload.format); return { loaded = true, format = payload.format }
+    elseif operation == 'create_save_state' then return self:create_save_state(payload.path, payload.format)
     elseif operation == 'capture_screenshot' then return self:capture_screenshot(payload.raw_path)
     end
     error('unsupported operation: ' .. tostring(operation))

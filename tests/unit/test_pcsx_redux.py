@@ -57,6 +57,9 @@ class NoopBridge:
     def request(self, operation: str, payload: dict[str, object], timeout_seconds: float) -> dict[str, object]:
         del operation, payload, timeout_seconds
         return {}
+    def wait_for_events(self, predicate: object, count: int, timeout_seconds: float) -> list[dict[str, object]]:
+        del predicate, count, timeout_seconds
+        return []
     def drain_events(self) -> list[dict[str, object]]: return []
     def close(self) -> None: pass
 

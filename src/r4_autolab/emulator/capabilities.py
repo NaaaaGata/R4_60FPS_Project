@@ -4,9 +4,11 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 import json
 from pathlib import Path
+import time
 from typing import Any, Callable, Protocol
 
 from ..models import LaunchConfig
+from ..models import BreakpointSpec
 from .pcsx_redux import PCSXReduxAdapter
 
 
@@ -64,6 +66,8 @@ class CapabilityRunner:
         timeout_seconds: float,
         allow_scratch_write: bool = False,
         scratch_address: int | None = None,
+        include_save_state_roundtrip: bool = False,
+        include_breakpoint_smoke: bool = False,
     ) -> None:
         self.adapter = adapter
         self.transport = transport
@@ -74,6 +78,8 @@ class CapabilityRunner:
         self.timeout_seconds = timeout_seconds
         self.allow_scratch_write = allow_scratch_write
         self.scratch_address = scratch_address
+        self.include_save_state_roundtrip = include_save_state_roundtrip
+        self.include_breakpoint_smoke = include_breakpoint_smoke
         self.checks: list[CapabilityCheck] = []
         self._launched = False
         self._connected = False
@@ -180,6 +186,20 @@ class CapabilityRunner:
             else:
                 self._skip("screenshot", "blocked by read-only memory failure")
 
+            if not self.include_breakpoint_smoke:
+                self._skip("breakpoint_smoke", "not requested")
+            elif read_only_ok:
+                read_only_ok = self._attempt("breakpoint_smoke", self._breakpoint_detail)
+            else:
+                self._skip("breakpoint_smoke", "read-only capability checks did not all pass")
+
+            if not self.include_save_state_roundtrip:
+                self._skip("save_state_roundtrip", "not requested")
+            elif read_only_ok:
+                read_only_ok = self._attempt("save_state_roundtrip", self._save_state_detail)
+            else:
+                self._skip("save_state_roundtrip", "read-only capability checks did not all pass")
+
             if not self.allow_scratch_write:
                 self._skip("scratch_write", "not requested; pass --allow-scratch-write explicitly")
             elif not read_only_ok:
@@ -281,6 +301,25 @@ class CapabilityRunner:
         if not raw.is_file() or raw.stat().st_size == 0 or not metadata.is_file():
             raise RuntimeError("screenshot raw data or metadata was not created")
         return f"raw={raw.name} bytes={raw.stat().st_size} metadata={metadata.name}"
+
+    def _breakpoint_detail(self) -> str:
+        # This address is in PS1 scratchpad, not game executable memory; the breakpoint is never resumed into.
+        identifier = self.adapter.set_breakpoint(BreakpointSpec(self.SCRATCH_END - 4, "execute", 4))
+        self.adapter.clear_breakpoint(identifier)
+        return f"created and removed non-firing Exec breakpoint {identifier}"
+
+    def _save_state_detail(self) -> str:
+        state = self.run_dir / "roundtrip.rawstate"
+        self.adapter.create_save_state(state)
+        deadline = time.monotonic() + self.timeout_seconds
+        while time.monotonic() < deadline:
+            if state.is_file() and state.stat().st_size > 0:
+                break
+            time.sleep(0.05)
+        if not state.is_file() or state.stat().st_size == 0:
+            raise RuntimeError("raw save state was not created before the timeout")
+        self.adapter.load_state(state)
+        return f"created and loaded raw-protobuf state ({state.stat().st_size} bytes)"
 
     def _shutdown_detail(self) -> str:
         self.adapter.shutdown()

@@ -61,13 +61,13 @@ Python listens on an ephemeral IPv4 socket bound exactly to `127.0.0.1`; Lua con
 
 ## Real capability result
 
-Latest successful report:
+Latest extended successful report:
 
 ```text
-runs/capabilities/pcsx-20260716T161043658162Z/capabilities.json
+runs/capabilities/pcsx-20260716T163234351518Z/capabilities.json
 ```
 
-Observed PASS results: launch, localhost IPC, authenticated protocol handshake, interpreter/debugger acknowledgment, pause, resume, ten strictly increasing VBlank events, CPU-cycle/VBlank counters, required registers, a four-byte read at `0x00000000` through `getMemoryAsFile`, a 640×478 16-bpp screenshot (611,840 raw bytes), normal shutdown, and child-process cleanup. Scratch write was SKIP because it was not requested and no operator-confirmed address was supplied.
+Observed PASS results: launch, localhost IPC, authenticated protocol handshake, interpreter/debugger acknowledgment, pause, resume, ten strictly increasing VBlank events, CPU-cycle/VBlank counters, required registers, a four-byte read at `0x00000000` through `getMemoryAsFile`, a 640×478 16-bpp screenshot (611,840 raw bytes), non-firing breakpoint creation/removal, a 19,026,416-byte raw-state create/load roundtrip, normal shutdown, and child-process cleanup. Scratch write was SKIP because it was not requested and no operator-confirmed address was supplied.
 
 Earlier failed reports are retained locally as evidence:
 

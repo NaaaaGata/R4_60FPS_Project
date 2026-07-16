@@ -23,6 +23,12 @@ class BridgeTransport(Protocol):
 
     def accept(self, timeout_seconds: float) -> None: ...
     def request(self, operation: str, payload: dict[str, Any], timeout_seconds: float) -> dict[str, Any]: ...
+    def wait_for_events(
+        self,
+        predicate: Any,
+        count: int,
+        timeout_seconds: float,
+    ) -> list[dict[str, Any]]: ...
     def drain_events(self) -> list[dict[str, Any]]: ...
     def close(self) -> None: ...
 
@@ -162,6 +168,8 @@ class PCSXReduxAdapter:
         return self.process
 
     def connect(self) -> None:
+        if self.bridge.connected:
+            return
         self.bridge.accept(self.timeout_seconds)
 
     def handshake(self) -> dict[str, Any]:
@@ -175,8 +183,18 @@ class PCSXReduxAdapter:
             )
         self._request("load_state", {"path": str(state.resolve()), "format": "raw-protobuf"})
 
+    def create_save_state(self, state: Path) -> None:
+        if state.suffix.lower() != ".rawstate":
+            raise ValueError("raw save-state output must use the .rawstate extension")
+        self._request("create_save_state", {"path": str(state.resolve()), "format": "raw-protobuf"})
+
     def run_vblanks(self, count: int) -> None:
         self._request("run_vblanks", {"count": count})
+        self.bridge.wait_for_events(
+            lambda event: event.get("event") == "vblank_target_reached",
+            1,
+            self.timeout_seconds,
+        )
 
     def pause(self) -> None:
         self._request("pause")

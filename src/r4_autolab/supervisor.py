@@ -78,6 +78,7 @@ class ExperimentSupervisor:
             self._move(proposal.id, machine, ExperimentState.LAUNCHING)
             self.emulator.launch(LaunchConfig(scenario, run_dir, self.timeout_seconds))
             launched = True
+            self.emulator.connect()
             self._move(proposal.id, machine, ExperimentState.LOADING_STATE)
             if save_state is not None:
                 self.emulator.load_state(save_state)
@@ -92,7 +93,10 @@ class ExperimentSupervisor:
             self._move(proposal.id, machine, ExperimentState.COLLECTING)
             events = self.emulator.drain_events()
             self.emulator.capture_screenshot(run_dir / "final.png")
-            self.emulator.export_gpu_log(run_dir / "gpu.log")
+            try:
+                self.emulator.export_gpu_log(run_dir / "gpu.log")
+            except NotImplementedError as error:
+                (run_dir / "gpu.log.unsupported.txt").write_text(str(error) + "\n", encoding="utf-8")
             trace_path = run_dir / "telemetry.jsonl"
             with trace_path.open("w", encoding="utf-8") as handle:
                 for event in events:

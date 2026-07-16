@@ -36,6 +36,10 @@ class FakeEmulator:
         self.run_dir = config.run_dir
         return {"pid": "fake", "scenario": self.scenario}
 
+    def connect(self) -> None:
+        if not self.running:
+            raise RuntimeError("fake emulator is not running")
+
     def load_state(self, state: Path) -> None:
         if not self.running:
             raise RuntimeError("fake emulator is not running")
@@ -129,4 +133,3 @@ class FakeEmulator:
     def shutdown(self) -> None:
         self.running = False
         self.paused = False
-

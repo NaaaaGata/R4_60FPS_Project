@@ -31,6 +31,7 @@ The Phase 3A host shim and capability transport are implemented. Run the read-on
 
 ```bash
 r4-autolab pcsx-capabilities
+r4-autolab pcsx-capabilities --include-breakpoint-smoke --include-save-state-roundtrip
 ```
 
 This command uses bundled OpenBIOS and no game image by default. It stores its report under `runs/capabilities/`. Do not pass `--allow-scratch-write` unless every read-only check passes and an operator has independently confirmed a non-code scratchpad address; an address is never guessed automatically.

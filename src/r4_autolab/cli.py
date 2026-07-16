@@ -46,18 +46,30 @@ def _target(config: ProjectConfig) -> TargetVersion:
 
 
 def _supervisor(config: ProjectConfig, store: ExperimentStore) -> ExperimentSupervisor:
-    if config.mode != "fake":
-        raise RuntimeError(
-            "real mode requires a verified PCSX-Redux BridgeTransport deployment; "
-            "run doctor and follow docs/SETUP.md"
+    if config.mode == "fake":
+        emulator: Any = FakeEmulator()
+    else:
+        executable = discover_pcsx_redux(config.pcsx_executable)
+        if executable is None:
+            raise RuntimeError("real mode requires an installed PCSX-Redux executable")
+        if config.disc_path is None or not config.disc_path.is_file():
+            raise RuntimeError("real mode requires an explicit private target.disc_path")
+        emulator = PCSXReduxAdapter(
+            PCSXLaunchOptions(
+                executable=executable,
+                lua_bootstrap=config.lua_bootstrap.resolve(),
+                run=True,
+                stdout=True,
+                lua_stdout=True,
+                interpreter=True,
+                debugger=True,
+                testmode=True,
+                bios=config.bios_path,
+                iso=config.disc_path,
+            ),
+            TcpJsonlTransport(),
         )
-    return ExperimentSupervisor(
-        store,
-        FakeEmulator(),
-        config.runs_dir,
-        _target(config),
-        timeout_seconds=config.timeout_seconds,
-    )
+    return ExperimentSupervisor(store, emulator, config.runs_dir, _target(config), timeout_seconds=config.timeout_seconds)
 
 
 def _load_config(args: argparse.Namespace) -> ProjectConfig:
@@ -150,6 +162,8 @@ def command_pcsx_capabilities(args: argparse.Namespace) -> int:
             timeout_seconds=max(config.timeout_seconds, 10.0),
             allow_scratch_write=bool(args.allow_scratch_write),
             scratch_address=scratch_address,
+            include_save_state_roundtrip=bool(args.include_save_state_roundtrip),
+            include_breakpoint_smoke=bool(args.include_breakpoint_smoke),
         )
         report = runner.run()
     for check in report.checks:
@@ -363,6 +377,8 @@ def build_parser() -> argparse.ArgumentParser:
     capabilities = subparsers.add_parser("pcsx-capabilities")
     capabilities.add_argument("--allow-scratch-write", action="store_true")
     capabilities.add_argument("--scratch-address", type=lambda value: int(value, 0))
+    capabilities.add_argument("--include-save-state-roundtrip", action="store_true")
+    capabilities.add_argument("--include-breakpoint-smoke", action="store_true")
     capabilities.set_defaults(func=command_pcsx_capabilities)
 
     stop = subparsers.add_parser("stop")
