@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "R4 render boundary candidate report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "result", "candidates"],
+  "properties": {
+    "protocol_version": {"const": 1},
+    "result": {"enum": ["RESULT_A", "RESULT_B", "RESULT_C"]},
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "candidate", "address", "role", "cadence", "required_inputs", "writes",
+          "unsafe_side_effects", "gpu_relationship", "buffer_relationship",
+          "can_reinvoke_without_logic", "can_use_interpolated_state", "confidence",
+          "blocking_evidence", "supporting_evidence", "classification"
+        ],
+        "properties": {
+          "candidate": {"type": "string", "minLength": 1},
+          "address": {"type": "string", "pattern": "^0x[0-9A-F]{8}$"},
+          "role": {"type": "string", "minLength": 1},
+          "cadence": {"type": "string", "minLength": 1},
+          "required_inputs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "writes": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "unsafe_side_effects": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "gpu_relationship": {"type": "string", "minLength": 1},
+          "buffer_relationship": {"type": "string", "minLength": 1},
+          "can_reinvoke_without_logic": {"type": "boolean"},
+          "can_use_interpolated_state": {"type": "boolean"},
+          "confidence": {"enum": ["low", "medium", "high"]},
+          "blocking_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "supporting_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "classification": {
+            "enum": [
+              "SAFE_RENDER_BOUNDARY", "POSSIBLE_WITH_STATE_SHADOWING",
+              "POSSIBLE_WITH_INTERPOLATION", "UNSAFE_SHARED_LOGIC", "INSUFFICIENT_EVIDENCE"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

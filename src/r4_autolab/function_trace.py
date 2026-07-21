@@ -81,6 +81,7 @@ def trace_function_cadence(
             portable_directory=run_dir / "portable",
             bios=assets.bios,
             iso=assets.cue,
+            read_only=True,
         ),
         transport,
     )
@@ -153,6 +154,8 @@ def trace_function_cadence(
         "max_hits_per_function": max_hits,
         "state_sha256": state_hash,
         "input_sha256": scenario.sha256,
+        "read_only_enforced": True,
+        "r4_memory_writes": 0,
         "functions": summaries,
         "failures": failures,
         "limitations": [

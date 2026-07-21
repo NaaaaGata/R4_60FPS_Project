@@ -22,8 +22,12 @@
 | Race timing model | COMPLETE FOR ONE STATE | Physics/AI dispatcher, camera, timer, main loop, and raw displayed image all 30 Hz |
 | Scratch restoration gate | COMPLETE FOR ONE NON-CODE WORD | Five scenarios / 1,920 VBlanks unaccessed; paused write/read/restore PASS |
 | 60 fps candidate gate | COMPLETE: NO SAFE CHANGE | Integrated 30 Hz loop; zero R4 patches; real Codex returned no change |
+| RecompOne R0 toolchain | COMPLETE / G0 PASS | Pinned clean MIT source, .NET 10.0.201, source build PASS |
+| RecompOne R1 adapter | COMPLETE | Typed fail-closed config, bounded process, redacted reports, fake tests |
+| RecompOne R2 funcMap | COMPLETE | Deterministic main/overlay maps from contiguous Ghidra ranges |
+| RecompOne R3 code generation | COMPLETE WITH G1 FAIL | 1,959 functions generated/compiled; 2 unknown instructions and 427 unmapped dispatch candidates block runtime |
 
-Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; SAFE PATCH EVIDENCE NOT YET ESTABLISHED**.
+Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; RECOMPONE STATIC ADAPTER COMPLETE; G1/RUNTIME AND SAFE PATCH EVIDENCE NOT ESTABLISHED**.
 
 ## Section 1 — Baseline audit (Phase 0 through Phase 3A)
 
@@ -378,3 +382,155 @@ Date: 2026-07-17 JST
 - Tracked-file audit found no state, run, private asset, BIN, CUE, extracted executable, or raw capture.
 - `git diff --check`: clean. `.metals/` and `.vscode/` remain unrelated untracked IDE directories and are excluded.
 - Final matrix, exact unresolved items, and reproduction commands are in `docs/FINAL_AUDIT.md`.
+
+## Section 17 — Render-boundary branch and loop parity
+
+Date: 2026-07-17 JST
+
+- Created `feat/render-boundary-analysis` from `feat/race-state-analysis`; private assets and unrelated `.metals/` / `.vscode/` remain untracked and untouched.
+- Revalidated 67 tests, mypy, doctor, extended read-only PCSX capabilities, exact state SHA-256, and all five deterministic inputs before analysis.
+- Extended the bounded Ghidra exporter with conditional-branch target, fall-through, predecessor, and delay-slot metadata.
+- Added a tested MIPS branch decoder and executable-identity-locked branch inventory.
+- Added a second read-only enforcement layer in Python and Lua; `write_memory` is rejected before IPC when enabled.
+- `trace-loop-parity` measured 600 VBlanks with 12 bounded Exec breakpoints and 16 fixed reads: 300 active and 300 duplicate intervals in exact alternation.
+- Main/race/vehicle/camera/timer/post and GPU submissions occur only on active intervals; every fixed watch and screenshot hash is unchanged on duplicates.
+- Exact wait branch: `0x8001EC54 bne v0,zero,0x8001EC48`, `nop` delay slot, fall-through `0x8001EC5C`; state-specific comparison threshold is 384.
+- Frame parity alternates command bases `0x800AD8D0` and `0x800D0048`, stride `0x22778`, once per active frame.
+- The 600-VBlank run retained 6,000 bounded events, wrote zero R4 bytes, shut down normally, and left no PCSX process.
+- Detailed evidence and limits: `docs/R4_LOOP_PARITY.md`.
+
+## Section 18 — Display/draw pages and bounded GPU command cadence
+
+Date: 2026-07-17 JST
+
+- Official PCSX-Redux Lua docs confirm raw screenshot access but do not document direct current-page, GP0/GP1, GPUSTAT, DMA2, or OT-root getters; no API was guessed.
+- Ghidra and dynamic `a0` values identify `0x8009331C` as PutDispEnv, `0x80093150` as PutDrawEnv, and `0x800930E0` as DrawOTag.
+- A 240-VBlank real trace confirmed opposing 320×240 display/draw pages at VRAM Y=0/Y=240, switched only on 120 active frames.
+- Four OT roots map to the two `0x22778` command arenas. Two lists are submitted per active frame and zero on every duplicate.
+- Added PS1 RAM pointer validation, loop detection, payload bounds, 4,096-node cap, 1 MiB byte cap, and address-normalized command hashing.
+- All 240 list traversals terminated normally. Primary list content changed on all 120 active frames; the secondary list was structurally stable.
+- Every duplicate reused the preceding command identity and screenshot hash. Normal shutdown left no PCSX process and wrote zero R4 bytes.
+- The first node-per-IPC prototype was safely interrupted as too slow; cleanup succeeded. A 1,024-node bounded attempt was retained as FAIL and motivated the final 4,096-node cap.
+- Detailed evidence and UNKNOWN fields: `docs/R4_GPU_PIPELINE.md`.
+
+## Section 19 — Active overlay call order and side effects
+
+Date: 2026-07-17 JST
+
+- Ghidra re-exported 14 selected base functions; dynamic tracing used only those boundaries plus the overlay entry, 15 breakpoints total.
+- Thirty active frames reconstructed identically from CPU-cycle order and overlay delimiters; 544 events stayed far below 2,048 per frame.
+- Selected order is timer → early HUD/OT → player/AI dispatcher → camera → stateful animation → camera matrices → render/geometry phases → stateful world effects → HUD animation → audio/static state → GPU submission.
+- OT construction starts before vehicle physics and continues later; the path is not a contiguous logic-then-render suffix.
+- Stateful animation, static, RNG/audio candidates, and OT writes are interleaved with geometry. The apparent render suffix is excluded from direct re-entry.
+- Two isolated HUD primitive builders survive the coarse side-effect exclusion but cannot redraw the 3D scene.
+- No render-only boundary is proven; no R4 memory write or patch was attempted.
+- Detailed callsites, roles, confidence, side effects, and boundary decisions: `docs/R4_RENDER_BOUNDARY.md`.
+
+## Section 20 — Input normalization and engine-speed candidate
+
+Date: 2026-07-17 JST
+
+- Five state-reloaded Pad override scenarios ran for 120 VBlanks each with a fixed 0x400-byte player-object window and six bounded breakpoints.
+- `FUN_8004AA7C` normalizes input once per active frame: `0x8004AD40` writes edge bits at `0x800F3820`, and `0x8004B6C4` writes held bits at `0x800F3822`.
+- Dynamic masks: CROSS `0x0040`, LEFT `0x8000`, RIGHT `0x2000`, and CROSS+LEFT `0x8040` in the high halfword. The raw SIO packet remains UNKNOWN.
+- `0x800F4A50` is written by vehicle function `FUN_80023924`, read by vehicle logic and the overlay HUD/audio path, and changes once per active frame.
+- Its scenario ranges and non-uniform speed correlations support “engine-speed-related candidate”; no calibrated RPM unit is claimed.
+- The player object search was strictly limited to 0x400 bytes and retained only ranked field summaries, not object dumps.
+- PASS: all five scenarios, zero R4 writes, normal shutdown, no residual PCSX process.
+- Details: `docs/R4_INPUT_PATH.md` and `docs/R4_RPM_INVESTIGATION.md`.
+
+## Section 21 — Three-run AI trajectory verification
+
+Date: 2026-07-17 JST
+
+- Added strict active-count and pointer-table validation: 8 unique aligned vehicle objects, verified player first, all fixed field windows inside PS1 RAM.
+- Three fresh PCSX processes each ran 600 VBlanks and sampled all eight vehicles every two VBlanks.
+- All 900 multi-vehicle samples matched exactly across attempts; each run recorded 300 shared `FUN_80038338` dispatcher hits.
+- Every AI changed X/Z/progress on nearly every active sample; orientation and speed changes remained value-dependent.
+- Individual trajectories confirm player and seven AI cars are coupled to the 30 Hz dispatcher.
+- A player/camera-only interpolation design would leave seven visible AI cars stepped and is therefore incomplete.
+- PASS with zero R4 writes, normal shutdown, and no residual PCSX process. Details: `docs/R4_AI_TRAJECTORIES.md`.
+
+## Section 22 — Audio cadence
+
+Date: 2026-07-17 JST
+
+- `FUN_8005006C` and ten major audio sub-updates ran exactly 60 times over 120 VBlanks, only on active integrated frames.
+- Engine/audio state setter `FUN_80050368` ran 180 times: one overlay use and two channel uses per active frame.
+- Lower SPU voice setters exceeded the 512-hit cap on active VBlanks; exact counts are censored rather than guessed.
+- Three CD/XA command/status functions each ran 60/120, confirming game-side XA/BGM control is also active-frame coupled in this state.
+- Audio waveform rate is not inferred from game control cadence. Audio updates are excluded from render-only re-entry.
+- Details: `docs/R4_AUDIO_CADENCE.md`.
+
+## Section 23 — Replay candidates and existing transform pairs
+
+Date: 2026-07-17 JST
+
+- Bounded runtime probes for `FUN_8002ECD0` and `FUN_8002D3B8` recorded zero hits in the current state; replay analysis remains STATIC_ONLY.
+- The mode callback table contains the active overlay and four alternate owned-overlay candidates; `DEMONSTRATION` exists in the base executable.
+- Alternate overlay decompilation calls `FUN_8002ECD0`, which reconstructs current XYZ from quarter-scale recorded fields, rebuilds matrices, applies offsets, and copies final XYZ to `+0xC8/+0xCC/+0xD0`.
+- A 120-VBlank player/AI probe confirmed `+0xC8/+0xCC/+0xD0` equals same-frame current XYZ on all 60 active samples, not previous-frame XYZ.
+- `+0x20/+0x24/+0x28` is a quarter-scale source related to current position, not a retained prior frame. No prior/current pair or interpolation fraction was found.
+- Camera scratch XYZ changes only on 60 active frames and remains unchanged on duplicates.
+- Details: `docs/R4_REPLAY_PATH.md`; state-pair evidence under ignored `runs/state-pairs/20260716T203519331882Z/`.
+
+## Section 24 — Render candidate schema and interpolation decision
+
+Date: 2026-07-17 JST
+
+- Added strict protocol-1 render candidate model and JSON Schema with exact fields, confidence, and five allowed classifications.
+- Four tracked candidates validate: active overlay and post-camera suffix are unsafe; alternate overlay and GPU transformation lack sufficient evidence.
+- Existing render XYZ is a same-frame copy, camera scratch is 30 Hz, seven AI require visual treatment, and stateful effects/audio remain interleaved.
+- Method A (re-run suffix) is unsafe; B (player/camera only) is incomplete; C (all vehicles/camera shadowing) is conceptually coherent but lacks a safe boundary; D (GPU command mutation) cannot reconstruct camera-aware geometry.
+- No code injection, code cave, RAM address, replacement instruction, or patch manifest was created.
+- Final classification: **RESULT_C — integrated too strongly with current evidence**.
+- Additional state plan is documented but no new state is requested in this phase.
+- Details: `docs/R4_INTERPOLATION_FEASIBILITY.md` and `docs/R4_RENDER_BOUNDARY_CANDIDATES.json`.
+
+## Section 25 — RecompOne phases R0–R3
+
+Date: 2026-07-22 JST
+
+### R0 toolchain — PASS (G0)
+
+- Audited the official `BlackLabelHQ/RecompOne` source at pinned commit `3d8b0e1b6ab7ebf444e8d4d02e6320746ec62807`, commit date `2026-07-20T15:38:24-03:00`, MIT license, clean tree.
+- Host is macOS 26.5 arm64; .NET SDK 10.0.201 and runtime 10.0.5 were used.
+- `dotnet build private/tools/recompone/RecompOne.sln --configuration Release --no-incremental` passed with 0 errors and 4 upstream warnings.
+- Added optional detection to `doctor` and strict `recompone-doctor` verification for commit, dirty state, license, and .NET major version.
+- The upstream checkout remains ignored under `private/tools/recompone/`; no release binary, game asset, or BIOS was downloaded.
+
+### R1 adapter/config — PASS
+
+- Added typed config validation and `schemas/recompone_config.schema.json`.
+- Main/overlay maps are mandatory; output is restricted to `private/recompone/generated/`; project/disc path escape is rejected.
+- `linearSweep`, debug, stubs, ignored functions, and patches are fail-closed.
+- Added shell-free bounded execution with timeout, log cap, process group cleanup, residual-child detection, partial/non-zero output classification, CUE/BIN before/after hashes, and path-redacted reports.
+- Fake tests cover success, unknown opcode, no output, partial output, non-zero exit, synthetic asset mutation, timeout, log cap, child cleanup, malformed config, and Git ignore protection.
+
+### R2 Ghidra function maps — PASS
+
+- Extended `R4Export.java` with first-contiguous-body range and range-count metadata so disjoint Ghidra bodies are not flattened into overlapping RecompOne functions.
+- Added deterministic conversion and `schemas/recompone_funcmap.schema.json`; alignment, positive size, payload containment, overlap, language, SHA-256, address/name duplication, and stable ordering are checked.
+- Main map: 1,456 functions, SHA-256 `c2caaba8db15b67978a78c63700517336408f8d41f4a3ba50b9f4b9223bf6cc1`.
+- Race map: 503 functions, SHA-256 `70ba2af106caaae147dd2c030f04c6b42dd12d0e7e4c20f0a6e548f4685d6886`.
+- Strict race conversion first rejected a one-byte Ghidra pseudo-function at `0x80119718`; the explicit invalid-function mode omitted exactly that non-instruction entry and recorded the classification. No RecompOne stub/ignore was added.
+
+### R3 owned-asset static smoke — compile PASS, G1 FAIL
+
+- Target identity matched `SLPS-01800`, executable SHA-256 `95a9dc1e81039d5a404091bf75bb1fb67c32f693faa04b629fb48073b2641775`, load `0x80010000`, entry `0x8007D4B4`.
+- Race overlay used verified `R4.BIN` offset `0x0261A000`, size `0x46000`, base `0x801146F0`; extracted overlay SHA-256 is `bd8567574ae116f8bf1df7a3282cd44d46b7523bfcd6b2867e0bf1de48aa53cb`.
+- Dry-run passed. Real generation exited 0 and emitted 1,959 functions (main 1,456, race 503), with main jump tables 68/979 and race 1/1. Reimplementations, configured stubs, ignored functions, and patches were all zero.
+- Generation report: ignored `runs/recompone/generation-20260721T225620832108Z/generation.json`.
+- Generated files: ignored `private/recompone/generated/r4-slps-01800/`; generated C# and build products are not Git candidates.
+- Two unknowns make generation FAIL: `0x0000000B @ 0x801166F0` and `0x61726167 @ 0x8011DEF4`. Both fall in embedded overlay text/data; the first also has original direct `jal` callers, so neither was silently removed.
+- Static generated-source validation found 427 unique `Dispatcher.Call` targets absent from all generated dispatch tables (log-time unmapped errors were zero because runtime was not started). These are explicit unmapped-call candidates, largely function continuations/omitted ranges plus external `0x88C1959C`; they are not treated as valid runtime paths.
+- Generated project compile passed with 0 errors / 4 upstream warnings. Build servers/shared compilation were disabled and no child process remained. Compile report: ignored `runs/recompone/compile-20260721T225851693181Z/compile.json`.
+- CUE SHA-256 remained `139eedfa188f0612f30bca2c0e9fb6d2fdbfd2502a9dc71fceafd73da3011e95`; BIN remained `72e54ea4bf6da5a2e839a355e9dcacae989fcddcab84b85cbbb4b2ff08f4a716`.
+- Runtime boot, PCSX/RecompOne runtime comparison, RAM writes, function replacement, PS1 patch, wait-branch change, and 60 fps experiment were not performed. No RecompOne process remained.
+
+### Gate and resume
+
+- G0 PASS; G1 FAIL; G2–G7 not entered.
+- Final validation: `pytest` 127 passed, `mypy src` clean for 50 source files, `doctor` PASS with optional RecompOne detected, `recompone-doctor` PASS, both private output probes ignored, and `git diff --check` PASS.
+- Next safe work is static instruction/function-boundary diagnosis of the two unknown locations and 427 unresolved dispatch targets, followed where necessary by an upstream-general fix reproduced with game-free synthetic fixtures. Runtime remains prohibited until a fresh report has unknown/unmapped/collision counts all zero and compile PASS.
+- Full details: `docs/RECOMPONE_COMPATIBILITY.md`, `docs/RECOMPONE_FIDELITY.md`, and ADR-008.

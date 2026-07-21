@@ -433,6 +433,7 @@ function Host:dispatch(operation, payload)
     elseif operation == 'read_memory' then
         return { data_base64 = self.base64.encode(self:read_memory(payload.address, payload.size)) }
     elseif operation == 'write_memory' then
+        assert(os.getenv('R4_AUTOLAB_READ_ONLY') ~= '1', 'memory writes are disabled for this read-only session')
         self:write_memory(payload.address, self.base64.decode(payload.data_base64)); return { written = true }
     elseif operation == 'set_breakpoint' then return { breakpoint_id = self:set_breakpoint(payload) }
     elseif operation == 'clear_breakpoint' then self:clear_breakpoint(payload.breakpoint_id); return { removed = true }

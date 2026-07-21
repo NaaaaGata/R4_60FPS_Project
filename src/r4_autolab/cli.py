@@ -51,6 +51,21 @@ from .overlay_probe import probe_runtime_overlay
 from .targeted_trace import parse_target_watch, trace_targeted_addresses
 from .render_cadence import measure_render_cadence
 from .scratch_audit import audit_scratch_location
+from .loop_parity import load_branch_inventory, trace_loop_parity
+from .gpu_trace import trace_gpu_buffers
+from .call_order import trace_race_call_order
+from .vehicle_probe import trace_input_and_engine_state
+from .ai_trace import trace_ai_trajectories
+from .state_pairs import trace_state_pairs
+from .recompone.config import ValidatedRecompOneConfig, load_recompone_config
+from .recompone.funcmap import convert_ghidra_export
+from .recompone.runner import RecompOneRunner, compile_generated_project, git_ignores_path
+from .recompone.tool import (
+    PINNED_RECOMPONE_COMMIT,
+    RecompOneTool,
+    discover_recompone,
+    dotnet_is_supported,
+)
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -104,10 +119,14 @@ def command_doctor(args: argparse.Namespace) -> int:
     python_ok = sys.version_info >= (3, 11)
     pcsx_path = discover_pcsx_redux()
     configured_ghidra: Path | None = None
+    configured_recompone: Path | None = None
     config_path = Path(args.config)
     if config_path.is_file():
-        configured_ghidra = load_project_config(config_path).ghidra_headless
+        loaded = load_project_config(config_path)
+        configured_ghidra = loaded.ghidra_headless
+        configured_recompone = loaded.recompone
     ghidra_path = discover_analyze_headless(configured_ghidra)
+    recompone = discover_recompone(configured_recompone)
     pcsx_version: str | None = None
     if pcsx_path is not None:
         try:
@@ -122,13 +141,138 @@ def command_doctor(args: argparse.Namespace) -> int:
         ("PCSX-Redux", str(pcsx_path) if pcsx_path else None, pcsx_version, False, True),
         ("Ghidra analyzeHeadless", str(ghidra_path) if ghidra_path else None, None, False, True),
         ("Java", shutil.which("java"), None, False, True),
+        (
+            "RecompOne",
+            str(recompone.path) if recompone else None,
+            recompone.commit if recompone else None,
+            False,
+            bool(
+                recompone
+                and recompone.pinned
+                and recompone.source_dirty is False
+                and recompone.license_name == "MIT"
+                and dotnet_is_supported(recompone.dotnet_version)
+            ),
+        ),
     ]
     print(f"R4 AutoLab {__version__}")
     for name, path, tool_version, required, valid in tools:
-        status = "OK" if path and valid else ("MISSING" if required else "optional-missing")
+        status = "OK" if path and valid else (
+            "MISSING" if required else ("WARN" if path else "optional-missing")
+        )
         detail = f" ({tool_version})" if tool_version else ""
         print(f"{status:16} {'required' if required else 'optional':8} {name}: {path or '-'}{detail}")
     return 0 if python_ok else 1
+
+
+def _recompone_tool(config: ProjectConfig) -> RecompOneTool:
+    tool = discover_recompone(config.recompone)
+    if tool is None:
+        raise RuntimeError(
+            "RecompOne was not found via R4_AUTOLAB_RECOMPONE, project configuration, or PATH"
+        )
+    if tool.commit != PINNED_RECOMPONE_COMMIT:
+        raise RuntimeError(
+            f"RecompOne commit mismatch: expected {PINNED_RECOMPONE_COMMIT}, got {tool.commit or 'unknown'}"
+        )
+    if tool.source_dirty is not False:
+        raise RuntimeError("RecompOne source checkout must be clean")
+    if tool.license_name != "MIT":
+        raise RuntimeError("RecompOne MIT license was not verified")
+    if not dotnet_is_supported(tool.dotnet_version):
+        raise RuntimeError("RecompOne requires a detected .NET SDK 10 or newer")
+    return tool
+
+
+def command_recompone_doctor(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    tool = _recompone_tool(config)
+    print(json.dumps(tool.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
+def command_recompone_export_funcmap(args: argparse.Namespace) -> int:
+    project = _load_config(args)
+    source = Path(args.ghidra_export).resolve()
+    output = Path(args.output).resolve()
+    allowed = (project.root / "private/recompone/function-maps").resolve()
+    if output != allowed and allowed not in output.parents:
+        raise ValueError("function map output must stay inside private/recompone/function-maps")
+    result = convert_ghidra_export(
+        source,
+        output,
+        block_name=args.block_name,
+        exclude_invalid_functions=bool(args.exclude_invalid_functions),
+    )
+    print(json.dumps({"output": str(output), **result.to_dict()}, indent=2, sort_keys=True))
+    return 0
+
+
+def _validated_recompone_config(
+    args: argparse.Namespace, project: ProjectConfig
+) -> ValidatedRecompOneConfig:
+    config = load_recompone_config(Path(args.recomp_config), project.root)
+    if project.disc_path is not None and config.cue_path != project.disc_path.resolve():
+        raise ValueError("RecompOne CUE must match target.disc_path")
+    identity = inspect_disc_executable(config.cue_path, project.root / "private/extracted")
+    if identity.disc_serial != project.serial or identity.sha256 != project.executable_sha256:
+        raise ValueError("RecompOne CUE target identity does not match project configuration")
+    return config
+
+
+def command_recompone_generate(args: argparse.Namespace) -> int:
+    project = _load_config(args)
+    tool = _recompone_tool(project)
+    config = _validated_recompone_config(args, project)
+    if git_ignores_path(project.root, config.output_directory) is not True:
+        raise RuntimeError("RecompOne generated output is not protected by Git ignore rules")
+    runner = RecompOneRunner(
+        tool,
+        timeout_seconds=float(args.timeout),
+        max_log_bytes=int(args.max_log_bytes),
+    )
+    if args.dry_run:
+        public_tool = tool.to_dict(relative_to=project.root)
+        print(
+            json.dumps(
+                {
+                    "status": "PASS",
+                    "dry_run": True,
+                    "tool": public_tool,
+                    "config_sha256": config.sha256,
+                    "output_directory": str(config.output_directory.relative_to(project.root)),
+                    "command": [*public_tool["launcher"], "<private-config>"],
+                    "runtime_started": False,
+                    "r4_memory_writes": 0,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    run_directory = project.runs_dir / "recompone" / _timestamp_id("generation")
+    report = runner.generate(config, run_directory)
+    print(json.dumps({"report": str(run_directory / "generation.json"), "status": report["status"]}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_recompone_compile(args: argparse.Namespace) -> int:
+    project = _load_config(args)
+    tool = _recompone_tool(project)
+    config = _validated_recompone_config(args, project)
+    if git_ignores_path(project.root, config.output_directory) is not True:
+        raise RuntimeError("RecompOne generated output is not protected by Git ignore rules")
+    run_directory = project.runs_dir / "recompone" / _timestamp_id("compile")
+    report = compile_generated_project(
+        tool,
+        config.output_directory,
+        run_directory,
+        project_root=project.root,
+        timeout_seconds=float(args.timeout),
+        max_log_bytes=int(args.max_log_bytes),
+    )
+    print(json.dumps({"report": str(run_directory / "compile.json"), "status": report["status"]}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
 
 
 def _write_unavailable_capability_report(
@@ -500,6 +644,190 @@ def command_audit_scratch(args: argparse.Namespace) -> int:
     return 0 if report["status"] == "PASS" else 2
 
 
+def command_trace_loop_parity(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for loop parity tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for loop parity tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    if args.scenario not in definitions:
+        raise ValueError(f"unknown input scenario: {args.scenario}")
+    branches = load_branch_inventory(
+        Path(args.branches).resolve(),
+        assets.identity.sha256,
+    )
+    report_path, report = trace_loop_parity(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        definitions[args.scenario],
+        branches,
+        vblanks=int(args.vblanks),
+        max_events=int(args.max_events),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_gpu_buffers(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for GPU buffer tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for GPU buffer tracing")
+    assets = discover_r4_assets(
+        config.root,
+        executable,
+        cue_override=config.disc_path,
+        bios_override=config.bios_path,
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    if args.scenario not in definitions:
+        raise ValueError(f"unknown input scenario: {args.scenario}")
+    report_path, report = trace_gpu_buffers(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        definitions[args.scenario],
+        vblanks=int(args.vblanks),
+        max_nodes=int(args.max_nodes),
+        max_bytes=int(args.max_bytes),
+        max_events=int(args.max_events),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_race_call_order(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for race call-order tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for race call-order tracing")
+    assets = discover_r4_assets(
+        config.root, executable, cue_override=config.disc_path, bios_override=config.bios_path
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    if args.scenario not in definitions:
+        raise ValueError(f"unknown input scenario: {args.scenario}")
+    report_path, report = trace_race_call_order(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        definitions[args.scenario],
+        frames=int(args.frames),
+        max_events_per_frame=int(args.max_events_per_frame),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_input_engine(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for input/engine tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for input/engine tracing")
+    assets = discover_r4_assets(
+        config.root, executable, cue_override=config.disc_path, bios_override=config.bios_path
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    names = list(args.scenario) if args.scenario else list(definitions)
+    unknown = sorted(set(names) - set(definitions))
+    if unknown:
+        raise ValueError("unknown input scenarios: " + ", ".join(unknown))
+    report_path, report = trace_input_and_engine_state(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        [definitions[name] for name in names],
+        vblanks=int(args.vblanks),
+        sample_every=int(args.sample_every),
+        max_hits=int(args.max_hits),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_ai_trajectories(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for AI trajectory tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for AI trajectory tracing")
+    assets = discover_r4_assets(
+        config.root, executable, cue_override=config.disc_path, bios_override=config.bios_path
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    if args.scenario not in definitions:
+        raise ValueError(f"unknown input scenario: {args.scenario}")
+    report_path, report = trace_ai_trajectories(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        definitions[args.scenario],
+        attempts=int(args.attempts),
+        vblanks=int(args.vblanks),
+        sample_every=int(args.sample_every),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_trace_state_pairs(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    executable = discover_pcsx_redux(config.pcsx_executable)
+    if executable is None:
+        raise RuntimeError("PCSX-Redux is required for state-pair tracing")
+    if config.save_state is None or not config.save_state.is_file():
+        raise RuntimeError("a verified target.save_state is required for state-pair tracing")
+    assets = discover_r4_assets(
+        config.root, executable, cue_override=config.disc_path, bios_override=config.bios_path
+    )
+    definitions = load_input_scenarios(Path(args.scenarios).resolve())
+    if args.scenario not in definitions:
+        raise ValueError(f"unknown input scenario: {args.scenario}")
+    report_path, report = trace_state_pairs(
+        config.root,
+        executable,
+        config.lua_bootstrap.resolve(),
+        config.save_state,
+        assets,
+        definitions[args.scenario],
+        vblanks=int(args.vblanks),
+        timeout_seconds=max(config.timeout_seconds, float(args.timeout)),
+    )
+    print(json.dumps({"status": report["status"], "report": str(report_path)}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
 def command_baseline(args: argparse.Namespace) -> int:
     config = _load_config(args)
     run_id = args.id or _timestamp_id("baseline")
@@ -774,6 +1102,29 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = subparsers.add_parser("doctor")
     doctor.set_defaults(func=command_doctor)
 
+    recompone_doctor = subparsers.add_parser("recompone-doctor")
+    recompone_doctor.set_defaults(func=command_recompone_doctor)
+
+    recompone_funcmap = subparsers.add_parser("recompone-export-funcmap")
+    recompone_funcmap.add_argument("--ghidra-export", required=True)
+    recompone_funcmap.add_argument("--output", required=True)
+    recompone_funcmap.add_argument("--block-name")
+    recompone_funcmap.add_argument("--exclude-invalid-functions", action="store_true")
+    recompone_funcmap.set_defaults(func=command_recompone_export_funcmap)
+
+    recompone_generate = subparsers.add_parser("recompone-generate")
+    recompone_generate.add_argument("--recomp-config", required=True)
+    recompone_generate.add_argument("--dry-run", action="store_true")
+    recompone_generate.add_argument("--timeout", type=float, default=300.0)
+    recompone_generate.add_argument("--max-log-bytes", type=int, default=4 * 1024 * 1024)
+    recompone_generate.set_defaults(func=command_recompone_generate)
+
+    recompone_compile = subparsers.add_parser("recompone-compile")
+    recompone_compile.add_argument("--recomp-config", required=True)
+    recompone_compile.add_argument("--timeout", type=float, default=300.0)
+    recompone_compile.add_argument("--max-log-bytes", type=int, default=4 * 1024 * 1024)
+    recompone_compile.set_defaults(func=command_recompone_compile)
+
     init = subparsers.add_parser("init-config")
     init.add_argument("--destination", default="config/project.toml")
     init.add_argument("--force", action="store_true")
@@ -849,6 +1200,58 @@ def build_parser() -> argparse.ArgumentParser:
     scratch_audit.add_argument("--scenarios", default="config/input_scenarios.example.json")
     scratch_audit.add_argument("--timeout", type=float, default=60.0)
     scratch_audit.set_defaults(func=command_audit_scratch)
+
+    loop_parity = subparsers.add_parser("trace-loop-parity")
+    loop_parity.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    loop_parity.add_argument("--scenario", default="accelerate-straight-600")
+    loop_parity.add_argument("--branches", default="config/loop_parity_branches.example.json")
+    loop_parity.add_argument("--vblanks", type=int, default=600)
+    loop_parity.add_argument("--max-events", type=int, default=20000)
+    loop_parity.add_argument("--timeout", type=float, default=60.0)
+    loop_parity.set_defaults(func=command_trace_loop_parity)
+
+    gpu_buffers = subparsers.add_parser("trace-gpu-buffers", aliases=["gpu-command-cadence"])
+    gpu_buffers.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    gpu_buffers.add_argument("--scenario", default="accelerate-straight-600")
+    gpu_buffers.add_argument("--vblanks", type=int, default=240)
+    gpu_buffers.add_argument("--max-nodes", type=int, default=4096)
+    gpu_buffers.add_argument("--max-bytes", type=int, default=1048576)
+    gpu_buffers.add_argument("--max-events", type=int, default=10000)
+    gpu_buffers.add_argument("--timeout", type=float, default=60.0)
+    gpu_buffers.set_defaults(func=command_trace_gpu_buffers)
+
+    call_order = subparsers.add_parser("trace-race-call-order")
+    call_order.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    call_order.add_argument("--scenario", default="accelerate-straight-600")
+    call_order.add_argument("--frames", type=int, default=30)
+    call_order.add_argument("--max-events-per-frame", type=int, default=2048)
+    call_order.add_argument("--timeout", type=float, default=60.0)
+    call_order.set_defaults(func=command_trace_race_call_order)
+
+    input_engine = subparsers.add_parser("trace-input-engine")
+    input_engine.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    input_engine.add_argument("--scenario", action="append")
+    input_engine.add_argument("--vblanks", type=int, default=120)
+    input_engine.add_argument("--sample-every", type=int, default=2)
+    input_engine.add_argument("--max-hits", type=int, default=64)
+    input_engine.add_argument("--timeout", type=float, default=60.0)
+    input_engine.set_defaults(func=command_trace_input_engine)
+
+    ai_trajectories = subparsers.add_parser("trace-ai-trajectories")
+    ai_trajectories.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    ai_trajectories.add_argument("--scenario", default="accelerate-straight-600")
+    ai_trajectories.add_argument("--attempts", type=int, default=3)
+    ai_trajectories.add_argument("--vblanks", type=int, default=600)
+    ai_trajectories.add_argument("--sample-every", type=int, default=2)
+    ai_trajectories.add_argument("--timeout", type=float, default=60.0)
+    ai_trajectories.set_defaults(func=command_trace_ai_trajectories)
+
+    state_pairs = subparsers.add_parser("trace-state-pairs")
+    state_pairs.add_argument("--scenarios", default="config/input_scenarios.example.json")
+    state_pairs.add_argument("--scenario", default="accelerate-straight-600")
+    state_pairs.add_argument("--vblanks", type=int, default=120)
+    state_pairs.add_argument("--timeout", type=float, default=60.0)
+    state_pairs.set_defaults(func=command_trace_state_pairs)
 
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--scenario", required=True)

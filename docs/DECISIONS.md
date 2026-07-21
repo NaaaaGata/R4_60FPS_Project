@@ -27,3 +27,11 @@ PCSX-Redux returns screenshot pixels as a Slice, so Phase 3A writes bounded raw 
 ## ADR-007: Deterministic input uses the emulator Pad override API
 
 Input replay uses PCSX-Redux's documented `PCSX.SIO0.slots[1].pads[1].setOverride` and `clearOverride` methods. This keeps input VBlank-aligned and inside the emulator process, avoids macOS accessibility permissions and timing jitter from OS-level events, and permits explicit release in every cleanup path. Input definitions are bounded JSON data with canonical SHA-256 identities; no new runtime dependency is added.
+
+## ADR-008: RecompOne is an experimental static-recompilation backend
+
+RecompOne is connected beside, not in place of, PCSX-Redux and Ghidra. The adapter accepts only the pinned MIT source commit `3d8b0e1b6ab7ebf444e8d4d02e6320746ec62807`, a clean checkout, and .NET 10 or newer. Initial configuration requires Ghidra-derived function maps and rejects linear sweep, debug logging, stubs, ignored functions, patches, and output outside ignored `private/recompone/generated/`.
+
+The reason for adoption is its deterministic per-function C# representation and explicit overlay mapping. These can make control flow and memory side effects easier to inspect than decompiler output alone. Generated code is game-derived and remains private. RecompOne-only findings are `RECOMP_STATIC_ONLY` until PCSX evidence agrees.
+
+The first R4 generation compiled but contained two unknown instructions and 427 generated dispatch targets absent from dispatch tables, so fidelity gate G1 remains failed. No runtime boot, function replacement, RAM write, frame-wait change, or 60 fps experiment is authorized. Resolving instruction/function-boundary semantics from original MIPS is required before any runtime phase.

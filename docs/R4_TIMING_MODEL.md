@@ -92,8 +92,20 @@ The base loop polls VSync and switches parity/buffer state, but the active race 
 
 Classification: **E — integrated 30 Hz loop**. This is stronger than category B because GPU submission and displayed-image changes have now been correlated to the same 30 Hz iteration; it is not category C because no separable render-only invocation has been observed.
 
+Render-boundary feasibility result: **RESULT_C**. Timing category E describes the measured loop topology; RESULT_C describes the current inability to isolate or interpolate a safe second game-render invocation. They are complementary classifications.
+
+## Exact wait branch and parity
+
+The previous cadence conclusion is now backed by branch-level evidence. `0x8001EC48` calls `FUN_8008AEF0` with `a0=1`; `0x8001EC50` compares its return with the state-specific threshold `s0=384`; and `bne` at `0x8001EC54` returns to the poll while the comparison is true. Its `0x8001EC58` delay slot is `nop`. The not-taken path reaches `0x8001EC5C`, which calls the same service with `a0=0` in its delay slot. The bounded trace observed 2,397 taken and three not-taken outcomes before its 2,400-event branch cap.
+
+Over a separate 600-VBlank run, active and duplicate intervals alternated exactly 300/300. Every fixed race watch and screenshot hash stayed unchanged on duplicate intervals. Active frames alternated parity 0/1 and command bases `0x800AD8D0` / `0x800D0048`, separated by `0x22778`. Full branch metadata, delay-slot handling, and bounds are in `docs/R4_LOOP_PARITY.md`.
+
+A 240-VBlank GPU trace decoded opposing 320×240 display/draw pages at VRAM Y=0 and Y=240. It bounded-traversed both submitted ordering tables on all 120 active frames: the primary content hash changed on every active frame, the secondary list was stable, and duplicates made no submission and reused the prior command/screenshot hashes. See `docs/R4_GPU_PIPELINE.md`.
+
+Three independent 600-VBlank AI runs validated eight unique vehicle objects and produced identical 300-sample trajectories. The shared `FUN_80038338` dispatcher hit exactly 300 times per run, while every AI changed X/Z/progress on nearly every active sample. This confirms individual AI motion is part of the same 30 Hz update, not merely a dispatcher inference.
+
 ## Consequence for experiments
 
 A safe 60 fps candidate cannot be inferred by simply removing a wait or doubling the whole loop: the measured loop contains physics, AI, camera, timer, HUD, and rendering together. Such a change has a high risk of doubling game speed and invalidating lap timing. The next patch candidate must first isolate a render-only call path or introduce interpolation with explicit evidence. Until then, patch generation remains gated off.
 
-Known limits: GPU command content hash and display/draw-buffer identity are unavailable through a confirmed Lua API; the input-read function, render-skip/parity branch semantics, replay path, and RPM field have not been mapped; AI vehicle trajectories, other courses/views, replay compatibility, audio cadence, and overclock requirements remain unverified. These are recorded as unresolved rather than inferred.
+Known limits after this phase: exact RPM units, raw SIO packet parser, analog input scalars, runtime replay/demo reachability, safe previous/current shadow ownership, other courses/views, replay compatibility, and overclock requirements remain unverified. GPU command hashes, display/draw pages, normalized digital input, AI trajectories, and game-side audio cadence are now measured. These are recorded with PASS/UNKNOWN/STATIC_ONLY labels rather than inferred.

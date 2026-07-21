@@ -5,7 +5,7 @@ The current-environment acceptance matrix and external blockers are in [docs/FIN
 
 R4 AutoLab is a reproducible, safety-first experiment supervisor for researching the PlayStation game *R4 -RIDGE RACER TYPE 4-*. Its purpose is to measure the relationship between VBlank, rendering, physics, AI, timers, and buffers before any 60 fps patch is attempted.
 
-The current MVP provides an asset-free fake experiment path plus a verified PCSX-Redux bridge: configuration, diagnostics, input/disc identity inspection, SQLite lifecycle history, JSONL telemetry, checked RAM patching and restoration, baseline/candidate evaluation, reporting, localhost Lua/JSONL IPC, raw screenshots, and raw save-state capture/reload. It does **not** claim a real-game 60 fps patch.
+The current MVP provides an asset-free fake experiment path plus a verified PCSX-Redux bridge: configuration, diagnostics, input/disc identity inspection, SQLite lifecycle history, JSONL telemetry, checked RAM patching and restoration, baseline/candidate evaluation, reporting, localhost Lua/JSONL IPC, raw screenshots, and raw save-state capture/reload. An experimental RecompOne backend now provides pinned-tool detection, safe private configuration, deterministic Ghidra function-map conversion, bounded code generation, and generated-C# compilation. It does **not** claim a real-game 60 fps patch.
 
 ## Five-minute fake demo
 
@@ -30,6 +30,11 @@ Generated artifacts are under `runs/<run-id>/`; SQLite is `runs/experiments.sqli
 
 ```bash
 r4-autolab doctor
+r4-autolab recompone-doctor
+r4-autolab recompone-export-funcmap --ghidra-export runs/static-cache/<id>/export.json --output private/recompone/function-maps/main.json
+r4-autolab recompone-generate --recomp-config private/recompone/config/r4.json --dry-run
+r4-autolab recompone-generate --recomp-config private/recompone/config/r4.json
+r4-autolab recompone-compile --recomp-config private/recompone/config/r4.json
 r4-autolab pcsx-capabilities
 r4-autolab pcsx-capabilities --include-breakpoint-smoke --include-save-state-roundtrip
 r4-autolab ghidra-export --input /private/path/PSX.EXE --address 0x80010000 --fake
@@ -59,6 +64,14 @@ r4-autolab stop
 
 Use `--config /path/to/project.toml` before the subcommand to select another project configuration.
 
+## Experimental RecompOne backend
+
+RecompOne is an optional static-recompilation research backend, not a replacement for PCSX-Redux or Ghidra. Point `R4_AUTOLAB_RECOMPONE` or `[tools].recompone` at a clean checkout of pinned commit `3d8b0e1b6ab7ebf444e8d4d02e6320746ec62807` after building it with .NET 10. Generated C# is game-derived and must remain under ignored `private/recompone/generated/`.
+
+The safe config rejects linear sweep, debug mode, stubs, ignored functions, patches, path escape, and unignored output. Generation records asset hashes and fails on unknown instructions, unmapped calls, collisions, timeout, log overflow, partial output, or residual processes. See [RecompOne compatibility](docs/RECOMPONE_COMPATIBILITY.md), [fidelity status](docs/RECOMPONE_FIDELITY.md), and [architecture](docs/ARCHITECTURE.md).
+
+The first R4 static generation emitted and compiled 1,959 mapped functions, but two race-overlay instructions remain unknown and 427 generated dispatch targets have no emitted table entry. Therefore fidelity gate G1 is FAIL and runtime boot is intentionally not implemented or attempted.
+
 ## Private asset setup
 
 Never commit a disc image, BIOS, executable, save state, or raw capture. Store them in ignored directories (`private/`, `input/`, `states/`, or `captures/raw/`) or outside the repository. `inspect-input` emits only filename, size, SHA-256, format, and direct PS-X EXE header metadata; it does not dump content.
@@ -73,3 +86,4 @@ The manual capture command auto-detects a verified private R4 Japanese CUE, star
 - Real Codex proposal-only execution is explicitly available with a non-zero finite budget and an empty evidence catalog; it cannot launch a RAM experiment until a reviewed candidate exists.
 - Official Ghidra 12.1.2 base/overlay export and deterministic controller replay are connected; a raw screenshot-hash fallback confirms 29.97 Hz displayed-image cadence, while GPU command hashing remains unavailable.
 - The R4 Japanese disc identity, active race overlay, player structure, and integrated 30 Hz race loop are confirmed for one captured race state. No evidence-backed render-only 60 fps patch exists yet.
+- RecompOne toolchain gate G0 passes, but code-generation gate G1 fails on two unknown race-overlay instructions and 427 unresolved dispatch targets. Generated compile success is not treated as runtime fidelity; runtime/cross-backend phases remain blocked.

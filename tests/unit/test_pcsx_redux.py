@@ -101,6 +101,17 @@ def test_adapter_uses_explicit_pad_override_operations(tmp_path: Path) -> None:
     ]
 
 
+def test_read_only_adapter_rejects_memory_write_before_transport(tmp_path: Path) -> None:
+    bridge = PadBridge()
+    adapter = PCSXReduxAdapter(
+        PCSXLaunchOptions(Path("pcsx-redux"), tmp_path / "bootstrap.lua", read_only=True),
+        bridge,  # type: ignore[arg-type]
+    )
+    with pytest.raises(RuntimeError, match="read-only"):
+        adapter.write_memory(0x80010000, b"\0\0\0\0")
+    assert bridge.operations == []
+
+
 def test_adapter_process_lock_rejects_concurrent_autolab_instances(tmp_path: Path) -> None:
     first = PCSXReduxAdapter(
         PCSXLaunchOptions(Path("pcsx-redux"), tmp_path / "bootstrap.lua"),

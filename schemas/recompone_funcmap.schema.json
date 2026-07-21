@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://r4-autolab.local/schemas/recompone_funcmap.schema.json",
+  "title": "RecompOne deterministic function map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["functions", "labels"],
+  "properties": {
+    "functions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["address", "name", "size"],
+        "properties": {
+          "address": {"type": "string", "pattern": "^0x[0-9A-F]{8}$"},
+          "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+          "size": {"type": "integer", "minimum": 4, "multipleOf": 4}
+        }
+      }
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["address", "name"],
+        "properties": {
+          "address": {"type": "string", "pattern": "^0x[0-9A-F]{8}$"},
+          "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+          "size": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}
