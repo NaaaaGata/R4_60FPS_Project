@@ -1,0 +1,26 @@
+{
+  "game": {
+    "id": "SLPS-01800",
+    "name": "R4_RESEARCH_ONLY",
+    "output": "../private/recompone/generated/r4"
+  },
+  "cue": "../private/owned-game.cue",
+  "funcMap": "../private/recompone/function-maps/main.json",
+  "main": "0x8007D4B4",
+  "linearSweep": false,
+  "debug": false,
+  "overlays": [
+    {
+      "name": "race",
+      "funcMap": "../private/recompone/function-maps/race.json",
+      "base": "0x801146F0",
+      "file": "R4.BIN",
+      "offset": 39952384,
+      "size": 286720,
+      "linearSweep": false
+    }
+  ],
+  "stubs": [],
+  "ignored": [],
+  "patches": []
+}

@@ -4,6 +4,7 @@ import ghidra.app.script.GhidraScript;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressRange;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.Instruction;
@@ -105,13 +106,19 @@ public class R4Export extends GhidraScript {
             boolean first = true;
             while (functions.hasNext() && !monitor.isCancelled()) {
                 Function function = functions.next();
+                AddressRange contiguous = function.getBody().getRangeContaining(function.getEntryPoint());
+                if (contiguous == null) continue;
                 if (!first) out.println(",");
                 first = false;
                 out.print("    {\"name\":" + quote(function.getName()) +
                     ",\"entry\":" + quote(hex(function.getEntryPoint())) +
                     ",\"file_offset\":" + quote(fileOffset(function.getEntryPoint(), payload, sourceFileOffset)) +
                     ",\"start\":" + quote(hex(function.getBody().getMinAddress())) +
-                    ",\"end\":" + quote(hex(function.getBody().getMaxAddress())) + "}");
+                    ",\"end\":" + quote(hex(function.getBody().getMaxAddress())) +
+                    ",\"body_range_count\":" + function.getBody().getNumAddressRanges() +
+                    ",\"contiguous_start\":" + quote(hex(contiguous.getMinAddress())) +
+                    ",\"contiguous_end\":" + quote(hex(contiguous.getMaxAddress())) +
+                    ",\"contiguous_size\":" + contiguous.getLength() + "}");
             }
             out.println("\n  ],");
             out.println("  \"basic_blocks\": [");

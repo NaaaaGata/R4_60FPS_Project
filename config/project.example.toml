@@ -31,3 +31,6 @@ scenario = "fake-straight"
 # Local official Ghidra support/analyzeHeadless path; keep private paths in the
 # ignored config/project.toml only.
 ghidra_headless = ""
+# RecompOne source checkout, built recompone.dll, or executable. Keep real
+# private paths in ignored config/project.toml only.
+recompone = ""

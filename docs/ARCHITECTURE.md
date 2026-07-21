@@ -13,7 +13,13 @@ Supervisor -> SafetyValidator -> EmulatorAdapter
     |                                `-- PCSXReduxAdapter boundary
     +-> ExperimentStore (SQLite)
     +-> JSONL telemetry/artifacts
-    `-> Evaluator/reporting
+    +-> Evaluator/reporting
+    `-> RecompOneAdapter (experimental, static-only at current gate)
+          |-- pinned source detector / .NET launcher
+          |-- typed private config validator
+          |-- Ghidra JSON -> deterministic funcMap
+          |-- bounded code-generation process
+          `-- generated-C# compiler
 ```
 
 ## Process and data flow
@@ -24,9 +30,13 @@ The initial PCSX-Redux boundary uses newline-delimited UTF-8 JSON. Every message
 
 Phase 3A selects a localhost-only TCP transport. Python opens an ephemeral listener on `127.0.0.1` before launching PCSX-Redux and passes the endpoint plus a random session token only through the child environment. Lua connects with PCSX-Redux's bundled Luv, validates requests, and dispatches them on the emulator main-loop safety context. Quitting closes the socket. No listener is exposed on LAN interfaces.
 
+The RecompOne path is a separate process boundary because code generation and a future native runtime have different contracts. The current boundary invokes only a pinned recompiler with an argument array. It applies a timeout, captured-output cap, dedicated process group, child cleanup, CUE/BIN before/after hashes, and failure classification for unknown instructions, unmapped calls, overlay collisions, partial output, and non-zero exit. Public reports redact absolute project paths. Runtime startup is deliberately absent until code-generation fidelity gate G1 passes.
+
+Ghidra remains the static-map authority. `R4Export.java` records each function's first contiguous body range; the converter rejects overlap, unaligned ranges, payload escape, malformed hashes/language, and non-deterministic duplicate symbols. Main and overlay maps are separate so VRAM base and disc offset cannot be conflated.
+
 ## Artifacts
 
-SQLite is the canonical experiment index and transition history. Each `runs/<run-id>/` directory contains proposal/metadata JSON, telemetry JSONL, logs, and later screenshots/GPU data. Large copyrighted memory or executable dumps are forbidden.
+SQLite is the canonical experiment index and transition history. Each `runs/<run-id>/` directory contains proposal/metadata JSON, telemetry JSONL, logs, and later screenshots/GPU data. RecompOne reports are under ignored `runs/recompone/`; configs, function maps, generated C#, build products, and any future runtime state are under ignored `private/recompone/`. Large copyrighted memory or executable dumps are forbidden.
 
 ## Failure behavior
 

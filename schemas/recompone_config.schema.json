@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://r4-autolab.local/schemas/recompone_config.schema.json",
+  "title": "R4 AutoLab safe RecompOne configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["game", "cue", "funcMap", "linearSweep", "debug", "overlays", "stubs", "ignored", "patches"],
+  "properties": {
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "output"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "output": {"type": "string", "minLength": 1}
+      }
+    },
+    "cue": {"type": "string", "minLength": 1},
+    "funcMap": {"type": "string", "minLength": 1},
+    "main": {"type": "string", "pattern": "^(0x)?[0-9A-Fa-f]{1,8}$"},
+    "linearSweep": {"const": false},
+    "debug": {"const": false},
+    "overlays": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "funcMap", "base", "file", "offset", "size", "linearSweep"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "funcMap": {"type": "string", "minLength": 1},
+          "base": {"type": "string", "pattern": "^(0x)?[0-9A-Fa-f]{1,8}$"},
+          "file": {"type": "string", "minLength": 1},
+          "offset": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+          "skip": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+          "lba": {"type": "integer", "minimum": -1},
+          "size": {"type": "integer", "minimum": 1},
+          "linearSweep": {"const": false}
+        }
+      }
+    },
+    "stubs": {"type": "array", "maxItems": 0},
+    "ignored": {"type": "array", "maxItems": 0},
+    "patches": {"type": "array", "maxItems": 0}
+  }
+}

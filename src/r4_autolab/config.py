@@ -24,6 +24,7 @@ class ProjectConfig:
     disc_path: Path | None
     scratch_address: int | None
     ghidra_headless: Path | None
+    recompone: Path | None
 
 
 def _resolve(root: Path, value: str) -> Path:
@@ -53,6 +54,7 @@ def load_project_config(path: Path) -> ProjectConfig:
     disc_value = str(target.get("disc_path", ""))
     raw_scratch = emulator.get("scratch_address")
     ghidra_value = str(tools.get("ghidra_headless", ""))
+    recompone_value = str(tools.get("recompone", ""))
     scratch_address = (
         int(raw_scratch, 0) if isinstance(raw_scratch, str) else int(raw_scratch)
     ) if raw_scratch is not None and raw_scratch != "" else None
@@ -73,4 +75,5 @@ def load_project_config(path: Path) -> ProjectConfig:
         disc_path=_resolve(root, disc_value) if disc_value else None,
         scratch_address=scratch_address,
         ghidra_headless=_resolve(root, ghidra_value) if ghidra_value else None,
+        recompone=_resolve(root, recompone_value) if recompone_value else None,
     )

@@ -57,6 +57,15 @@ from .call_order import trace_race_call_order
 from .vehicle_probe import trace_input_and_engine_state
 from .ai_trace import trace_ai_trajectories
 from .state_pairs import trace_state_pairs
+from .recompone.config import ValidatedRecompOneConfig, load_recompone_config
+from .recompone.funcmap import convert_ghidra_export
+from .recompone.runner import RecompOneRunner, compile_generated_project, git_ignores_path
+from .recompone.tool import (
+    PINNED_RECOMPONE_COMMIT,
+    RecompOneTool,
+    discover_recompone,
+    dotnet_is_supported,
+)
 
 
 FAKE_TARGET = TargetVersion("FAKE", "0" * 64)
@@ -110,10 +119,14 @@ def command_doctor(args: argparse.Namespace) -> int:
     python_ok = sys.version_info >= (3, 11)
     pcsx_path = discover_pcsx_redux()
     configured_ghidra: Path | None = None
+    configured_recompone: Path | None = None
     config_path = Path(args.config)
     if config_path.is_file():
-        configured_ghidra = load_project_config(config_path).ghidra_headless
+        loaded = load_project_config(config_path)
+        configured_ghidra = loaded.ghidra_headless
+        configured_recompone = loaded.recompone
     ghidra_path = discover_analyze_headless(configured_ghidra)
+    recompone = discover_recompone(configured_recompone)
     pcsx_version: str | None = None
     if pcsx_path is not None:
         try:
@@ -128,13 +141,138 @@ def command_doctor(args: argparse.Namespace) -> int:
         ("PCSX-Redux", str(pcsx_path) if pcsx_path else None, pcsx_version, False, True),
         ("Ghidra analyzeHeadless", str(ghidra_path) if ghidra_path else None, None, False, True),
         ("Java", shutil.which("java"), None, False, True),
+        (
+            "RecompOne",
+            str(recompone.path) if recompone else None,
+            recompone.commit if recompone else None,
+            False,
+            bool(
+                recompone
+                and recompone.pinned
+                and recompone.source_dirty is False
+                and recompone.license_name == "MIT"
+                and dotnet_is_supported(recompone.dotnet_version)
+            ),
+        ),
     ]
     print(f"R4 AutoLab {__version__}")
     for name, path, tool_version, required, valid in tools:
-        status = "OK" if path and valid else ("MISSING" if required else "optional-missing")
+        status = "OK" if path and valid else (
+            "MISSING" if required else ("WARN" if path else "optional-missing")
+        )
         detail = f" ({tool_version})" if tool_version else ""
         print(f"{status:16} {'required' if required else 'optional':8} {name}: {path or '-'}{detail}")
     return 0 if python_ok else 1
+
+
+def _recompone_tool(config: ProjectConfig) -> RecompOneTool:
+    tool = discover_recompone(config.recompone)
+    if tool is None:
+        raise RuntimeError(
+            "RecompOne was not found via R4_AUTOLAB_RECOMPONE, project configuration, or PATH"
+        )
+    if tool.commit != PINNED_RECOMPONE_COMMIT:
+        raise RuntimeError(
+            f"RecompOne commit mismatch: expected {PINNED_RECOMPONE_COMMIT}, got {tool.commit or 'unknown'}"
+        )
+    if tool.source_dirty is not False:
+        raise RuntimeError("RecompOne source checkout must be clean")
+    if tool.license_name != "MIT":
+        raise RuntimeError("RecompOne MIT license was not verified")
+    if not dotnet_is_supported(tool.dotnet_version):
+        raise RuntimeError("RecompOne requires a detected .NET SDK 10 or newer")
+    return tool
+
+
+def command_recompone_doctor(args: argparse.Namespace) -> int:
+    config = _load_config(args)
+    tool = _recompone_tool(config)
+    print(json.dumps(tool.to_dict(), indent=2, sort_keys=True))
+    return 0
+
+
+def command_recompone_export_funcmap(args: argparse.Namespace) -> int:
+    project = _load_config(args)
+    source = Path(args.ghidra_export).resolve()
+    output = Path(args.output).resolve()
+    allowed = (project.root / "private/recompone/function-maps").resolve()
+    if output != allowed and allowed not in output.parents:
+        raise ValueError("function map output must stay inside private/recompone/function-maps")
+    result = convert_ghidra_export(
+        source,
+        output,
+        block_name=args.block_name,
+        exclude_invalid_functions=bool(args.exclude_invalid_functions),
+    )
+    print(json.dumps({"output": str(output), **result.to_dict()}, indent=2, sort_keys=True))
+    return 0
+
+
+def _validated_recompone_config(
+    args: argparse.Namespace, project: ProjectConfig
+) -> ValidatedRecompOneConfig:
+    config = load_recompone_config(Path(args.recomp_config), project.root)
+    if project.disc_path is not None and config.cue_path != project.disc_path.resolve():
+        raise ValueError("RecompOne CUE must match target.disc_path")
+    identity = inspect_disc_executable(config.cue_path, project.root / "private/extracted")
+    if identity.disc_serial != project.serial or identity.sha256 != project.executable_sha256:
+        raise ValueError("RecompOne CUE target identity does not match project configuration")
+    return config
+
+
+def command_recompone_generate(args: argparse.Namespace) -> int:
+    project = _load_config(args)
+    tool = _recompone_tool(project)
+    config = _validated_recompone_config(args, project)
+    if git_ignores_path(project.root, config.output_directory) is not True:
+        raise RuntimeError("RecompOne generated output is not protected by Git ignore rules")
+    runner = RecompOneRunner(
+        tool,
+        timeout_seconds=float(args.timeout),
+        max_log_bytes=int(args.max_log_bytes),
+    )
+    if args.dry_run:
+        public_tool = tool.to_dict(relative_to=project.root)
+        print(
+            json.dumps(
+                {
+                    "status": "PASS",
+                    "dry_run": True,
+                    "tool": public_tool,
+                    "config_sha256": config.sha256,
+                    "output_directory": str(config.output_directory.relative_to(project.root)),
+                    "command": [*public_tool["launcher"], "<private-config>"],
+                    "runtime_started": False,
+                    "r4_memory_writes": 0,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    run_directory = project.runs_dir / "recompone" / _timestamp_id("generation")
+    report = runner.generate(config, run_directory)
+    print(json.dumps({"report": str(run_directory / "generation.json"), "status": report["status"]}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
+
+
+def command_recompone_compile(args: argparse.Namespace) -> int:
+    project = _load_config(args)
+    tool = _recompone_tool(project)
+    config = _validated_recompone_config(args, project)
+    if git_ignores_path(project.root, config.output_directory) is not True:
+        raise RuntimeError("RecompOne generated output is not protected by Git ignore rules")
+    run_directory = project.runs_dir / "recompone" / _timestamp_id("compile")
+    report = compile_generated_project(
+        tool,
+        config.output_directory,
+        run_directory,
+        project_root=project.root,
+        timeout_seconds=float(args.timeout),
+        max_log_bytes=int(args.max_log_bytes),
+    )
+    print(json.dumps({"report": str(run_directory / "compile.json"), "status": report["status"]}, indent=2))
+    return 0 if report["status"] == "PASS" else 2
 
 
 def _write_unavailable_capability_report(
@@ -963,6 +1101,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor")
     doctor.set_defaults(func=command_doctor)
+
+    recompone_doctor = subparsers.add_parser("recompone-doctor")
+    recompone_doctor.set_defaults(func=command_recompone_doctor)
+
+    recompone_funcmap = subparsers.add_parser("recompone-export-funcmap")
+    recompone_funcmap.add_argument("--ghidra-export", required=True)
+    recompone_funcmap.add_argument("--output", required=True)
+    recompone_funcmap.add_argument("--block-name")
+    recompone_funcmap.add_argument("--exclude-invalid-functions", action="store_true")
+    recompone_funcmap.set_defaults(func=command_recompone_export_funcmap)
+
+    recompone_generate = subparsers.add_parser("recompone-generate")
+    recompone_generate.add_argument("--recomp-config", required=True)
+    recompone_generate.add_argument("--dry-run", action="store_true")
+    recompone_generate.add_argument("--timeout", type=float, default=300.0)
+    recompone_generate.add_argument("--max-log-bytes", type=int, default=4 * 1024 * 1024)
+    recompone_generate.set_defaults(func=command_recompone_generate)
+
+    recompone_compile = subparsers.add_parser("recompone-compile")
+    recompone_compile.add_argument("--recomp-config", required=True)
+    recompone_compile.add_argument("--timeout", type=float, default=300.0)
+    recompone_compile.add_argument("--max-log-bytes", type=int, default=4 * 1024 * 1024)
+    recompone_compile.set_defaults(func=command_recompone_compile)
 
     init = subparsers.add_parser("init-config")
     init.add_argument("--destination", default="config/project.toml")

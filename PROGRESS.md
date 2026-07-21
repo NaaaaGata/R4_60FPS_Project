@@ -22,8 +22,12 @@
 | Race timing model | COMPLETE FOR ONE STATE | Physics/AI dispatcher, camera, timer, main loop, and raw displayed image all 30 Hz |
 | Scratch restoration gate | COMPLETE FOR ONE NON-CODE WORD | Five scenarios / 1,920 VBlanks unaccessed; paused write/read/restore PASS |
 | 60 fps candidate gate | COMPLETE: NO SAFE CHANGE | Integrated 30 Hz loop; zero R4 patches; real Codex returned no change |
+| RecompOne R0 toolchain | COMPLETE / G0 PASS | Pinned clean MIT source, .NET 10.0.201, source build PASS |
+| RecompOne R1 adapter | COMPLETE | Typed fail-closed config, bounded process, redacted reports, fake tests |
+| RecompOne R2 funcMap | COMPLETE | Deterministic main/overlay maps from contiguous Ghidra ranges |
+| RecompOne R3 code generation | COMPLETE WITH G1 FAIL | 1,959 functions generated/compiled; 2 unknown instructions and 427 unmapped dispatch candidates block runtime |
 
-Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; SAFE PATCH EVIDENCE NOT YET ESTABLISHED**.
+Overall implementation status: **FIRST RACE TIMING MODEL COMPLETE; RECOMPONE STATIC ADAPTER COMPLETE; G1/RUNTIME AND SAFE PATCH EVIDENCE NOT ESTABLISHED**.
 
 ## Section 1 — Baseline audit (Phase 0 through Phase 3A)
 
@@ -482,3 +486,51 @@ Date: 2026-07-17 JST
 - Final classification: **RESULT_C — integrated too strongly with current evidence**.
 - Additional state plan is documented but no new state is requested in this phase.
 - Details: `docs/R4_INTERPOLATION_FEASIBILITY.md` and `docs/R4_RENDER_BOUNDARY_CANDIDATES.json`.
+
+## Section 25 — RecompOne phases R0–R3
+
+Date: 2026-07-22 JST
+
+### R0 toolchain — PASS (G0)
+
+- Audited the official `BlackLabelHQ/RecompOne` source at pinned commit `3d8b0e1b6ab7ebf444e8d4d02e6320746ec62807`, commit date `2026-07-20T15:38:24-03:00`, MIT license, clean tree.
+- Host is macOS 26.5 arm64; .NET SDK 10.0.201 and runtime 10.0.5 were used.
+- `dotnet build private/tools/recompone/RecompOne.sln --configuration Release --no-incremental` passed with 0 errors and 4 upstream warnings.
+- Added optional detection to `doctor` and strict `recompone-doctor` verification for commit, dirty state, license, and .NET major version.
+- The upstream checkout remains ignored under `private/tools/recompone/`; no release binary, game asset, or BIOS was downloaded.
+
+### R1 adapter/config — PASS
+
+- Added typed config validation and `schemas/recompone_config.schema.json`.
+- Main/overlay maps are mandatory; output is restricted to `private/recompone/generated/`; project/disc path escape is rejected.
+- `linearSweep`, debug, stubs, ignored functions, and patches are fail-closed.
+- Added shell-free bounded execution with timeout, log cap, process group cleanup, residual-child detection, partial/non-zero output classification, CUE/BIN before/after hashes, and path-redacted reports.
+- Fake tests cover success, unknown opcode, no output, partial output, non-zero exit, synthetic asset mutation, timeout, log cap, child cleanup, malformed config, and Git ignore protection.
+
+### R2 Ghidra function maps — PASS
+
+- Extended `R4Export.java` with first-contiguous-body range and range-count metadata so disjoint Ghidra bodies are not flattened into overlapping RecompOne functions.
+- Added deterministic conversion and `schemas/recompone_funcmap.schema.json`; alignment, positive size, payload containment, overlap, language, SHA-256, address/name duplication, and stable ordering are checked.
+- Main map: 1,456 functions, SHA-256 `c2caaba8db15b67978a78c63700517336408f8d41f4a3ba50b9f4b9223bf6cc1`.
+- Race map: 503 functions, SHA-256 `70ba2af106caaae147dd2c030f04c6b42dd12d0e7e4c20f0a6e548f4685d6886`.
+- Strict race conversion first rejected a one-byte Ghidra pseudo-function at `0x80119718`; the explicit invalid-function mode omitted exactly that non-instruction entry and recorded the classification. No RecompOne stub/ignore was added.
+
+### R3 owned-asset static smoke — compile PASS, G1 FAIL
+
+- Target identity matched `SLPS-01800`, executable SHA-256 `95a9dc1e81039d5a404091bf75bb1fb67c32f693faa04b629fb48073b2641775`, load `0x80010000`, entry `0x8007D4B4`.
+- Race overlay used verified `R4.BIN` offset `0x0261A000`, size `0x46000`, base `0x801146F0`; extracted overlay SHA-256 is `bd8567574ae116f8bf1df7a3282cd44d46b7523bfcd6b2867e0bf1de48aa53cb`.
+- Dry-run passed. Real generation exited 0 and emitted 1,959 functions (main 1,456, race 503), with main jump tables 68/979 and race 1/1. Reimplementations, configured stubs, ignored functions, and patches were all zero.
+- Generation report: ignored `runs/recompone/generation-20260721T225620832108Z/generation.json`.
+- Generated files: ignored `private/recompone/generated/r4-slps-01800/`; generated C# and build products are not Git candidates.
+- Two unknowns make generation FAIL: `0x0000000B @ 0x801166F0` and `0x61726167 @ 0x8011DEF4`. Both fall in embedded overlay text/data; the first also has original direct `jal` callers, so neither was silently removed.
+- Static generated-source validation found 427 unique `Dispatcher.Call` targets absent from all generated dispatch tables (log-time unmapped errors were zero because runtime was not started). These are explicit unmapped-call candidates, largely function continuations/omitted ranges plus external `0x88C1959C`; they are not treated as valid runtime paths.
+- Generated project compile passed with 0 errors / 4 upstream warnings. Build servers/shared compilation were disabled and no child process remained. Compile report: ignored `runs/recompone/compile-20260721T225851693181Z/compile.json`.
+- CUE SHA-256 remained `139eedfa188f0612f30bca2c0e9fb6d2fdbfd2502a9dc71fceafd73da3011e95`; BIN remained `72e54ea4bf6da5a2e839a355e9dcacae989fcddcab84b85cbbb4b2ff08f4a716`.
+- Runtime boot, PCSX/RecompOne runtime comparison, RAM writes, function replacement, PS1 patch, wait-branch change, and 60 fps experiment were not performed. No RecompOne process remained.
+
+### Gate and resume
+
+- G0 PASS; G1 FAIL; G2–G7 not entered.
+- Final validation: `pytest` 127 passed, `mypy src` clean for 50 source files, `doctor` PASS with optional RecompOne detected, `recompone-doctor` PASS, both private output probes ignored, and `git diff --check` PASS.
+- Next safe work is static instruction/function-boundary diagnosis of the two unknown locations and 427 unresolved dispatch targets, followed where necessary by an upstream-general fix reproduced with game-free synthetic fixtures. Runtime remains prohibited until a fresh report has unknown/unmapped/collision counts all zero and compile PASS.
+- Full details: `docs/RECOMPONE_COMPATIBILITY.md`, `docs/RECOMPONE_FIDELITY.md`, and ADR-008.
